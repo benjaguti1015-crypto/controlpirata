@@ -31,6 +31,7 @@ import {
 import { HistorialCierres } from "@/components/HistorialCierres";
 import { useStore, money, totalPedido, costoPedido } from "@/lib/store";
 import { toast } from "sonner";
+import { AdminGuard } from "@/components/AdminGuard";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -87,159 +88,163 @@ function Dashboard() {
 
   if (!hidratado) {
     return (
-      <AppShell>
-        <div className="h-40 animate-pulse rounded-3xl bg-secondary/60" />
-      </AppShell>
+      <AdminGuard>
+        <AppShell>
+          <div className="h-40 animate-pulse rounded-3xl bg-secondary/60" />
+        </AppShell>
+      </AdminGuard>
     );
   }
 
   return (
-    <AppShell>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Panel financiero</h1>
-          <p className="text-sm text-muted-foreground">
-            Resultados reales según pedidos entregados
-          </p>
-        </div>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <CalendarCheck className="h-4 w-4" /> Cerrar día
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>¿Cerrar el día actual?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Se guardarán {money(m.ingresos)} en ventas y {money(m.utilidad)} de utilidad en tu
-                historial. Los pedidos entregados se archivan y las métricas del día vuelven a
-                cero. Los pedidos pendientes se mantienen.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  const cierre = cerrarDia();
-                  if (cierre) {
-                    toast.success("Día cerrado", {
-                      description: `${money(cierre.ingresos)} en ventas guardados en el historial.`,
-                    });
-                  } else {
-                    toast.error("No hay pedidos entregados para cerrar el día.");
-                  }
-                }}
-              >
-                Cerrar día
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-
-      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric icon={Coins} label="Ingresos totales" value={money(m.ingresos)} />
-        <Metric icon={Receipt} label="Costos totales" value={money(m.costos)} />
-        <Metric
-          icon={Wallet}
-          label="Utilidad neta"
-          value={money(m.utilidad)}
-          hint={`${margenPct.toFixed(0)}% de margen`}
-          destacado
-        />
-        <Metric
-          icon={Clock}
-          label="Pedidos pendientes"
-          value={String(m.pendientes.length)}
-          hint={`${money(m.valorPendiente)} por cobrar`}
-        />
-      </div>
-
-      {productos.length === 0 ? (
-        <div className="mt-6">
-          <EmptyState
-            icon={Cookie}
-            title="Comienza registrando tus galletas"
-            description="Agrega productos con su costo y precio para que el panel calcule tus utilidades automáticamente."
-            action={
-              <Button asChild>
-                <Link to="/productos">
-                  <Plus className="h-4 w-4" /> Crear producto
-                </Link>
+    <AdminGuard>
+      <AppShell>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">Panel financiero</h1>
+            <p className="text-sm text-muted-foreground">
+              Resultados reales según pedidos entregados
+            </p>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <CalendarCheck className="h-4 w-4" /> Cerrar día
               </Button>
-            }
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Cerrar el día actual?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Se guardarán {money(m.ingresos)} en ventas y {money(m.utilidad)} de utilidad en tu
+                  historial. Los pedidos entregados se archivan y las métricas del día vuelven a
+                  cero. Los pedidos pendientes se mantienen.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    const cierre = cerrarDia();
+                    if (cierre) {
+                      toast.success("Día cerrado", {
+                        description: `${money(cierre.ingresos)} en ventas guardados en el historial.`,
+                      });
+                    } else {
+                      toast.error("No hay pedidos entregados para cerrar el día.");
+                    }
+                  }}
+                >
+                  Cerrar día
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Metric icon={Coins} label="Ingresos totales" value={money(m.ingresos)} />
+          <Metric icon={Receipt} label="Costos totales" value={money(m.costos)} />
+          <Metric
+            icon={Wallet}
+            label="Utilidad neta"
+            value={money(m.utilidad)}
+            hint={`${margenPct.toFixed(0)}% de margen`}
+            destacado
+          />
+          <Metric
+            icon={Clock}
+            label="Pedidos pendientes"
+            value={String(m.pendientes.length)}
+            hint={`${money(m.valorPendiente)} por cobrar`}
           />
         </div>
-      ) : (
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <Card>
-            <CardContent className="p-5">
-              <h2 className="flex items-center gap-2 text-base font-semibold">
-                <TrendingUp className="h-4 w-4 text-primary" /> Más vendidas
-              </h2>
-              {m.top.length === 0 ? (
-                <p className="mt-4 text-sm text-muted-foreground">
-                  Aún no hay pedidos entregados. Marca un pedido como entregado para ver el
-                  ranking.
-                </p>
-              ) : (
-                <ul className="mt-4 space-y-4">
-                  {m.top.map((t) => (
-                    <li key={t.nombre}>
-                      <div className="flex justify-between gap-3 text-sm">
-                        <span className="truncate font-medium">{t.nombre}</span>
-                        <span className="shrink-0 text-muted-foreground">
-                          {t.unidades} u. · {money(t.ingresos)}
-                        </span>
-                      </div>
-                      <Progress
-                        value={maxUnidades ? (t.unidades / maxUnidades) * 100 : 0}
-                        className="mt-2 h-2"
-                      />
+
+        {productos.length === 0 ? (
+          <div className="mt-6">
+            <EmptyState
+              icon={Cookie}
+              title="Comienza registrando tus galletas"
+              description="Agrega productos con su costo y precio para que el panel calcule tus utilidades automáticamente."
+              action={
+                <Button asChild>
+                  <Link to="/productos">
+                    <Plus className="h-4 w-4" /> Crear producto
+                  </Link>
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardContent className="p-5">
+                <h2 className="flex items-center gap-2 text-base font-semibold">
+                  <TrendingUp className="h-4 w-4 text-primary" /> Más vendidas
+                </h2>
+                {m.top.length === 0 ? (
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    Aún no hay pedidos entregados. Marca un pedido como entregado para ver el
+                    ranking.
+                  </p>
+                ) : (
+                  <ul className="mt-4 space-y-4">
+                    {m.top.map((t) => (
+                      <li key={t.nombre}>
+                        <div className="flex justify-between gap-3 text-sm">
+                          <span className="truncate font-medium">{t.nombre}</span>
+                          <span className="shrink-0 text-muted-foreground">
+                            {t.unidades} u. · {money(t.ingresos)}
+                          </span>
+                        </div>
+                        <Progress
+                          value={maxUnidades ? (t.unidades / maxUnidades) * 100 : 0}
+                          className="mt-2 h-2"
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-5">
+                <h2 className="text-base font-semibold">Inventario actual</h2>
+                <ul className="mt-4 space-y-3">
+                  {productos.slice(0, 6).map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate">{p.nombre}</span>
+                      <span
+                        className={
+                          p.stock <= 0
+                            ? "shrink-0 font-semibold text-destructive"
+                            : "shrink-0 font-semibold"
+                        }
+                      >
+                        {p.stock} u.
+                      </span>
                     </li>
                   ))}
                 </ul>
-              )}
-            </CardContent>
-          </Card>
+                <Button asChild variant="outline" className="mt-5 w-full">
+                  <Link to="/productos">Ver inventario completo</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-          <Card>
-            <CardContent className="p-5">
-              <h2 className="text-base font-semibold">Inventario actual</h2>
-              <ul className="mt-4 space-y-3">
-                {productos.slice(0, 6).map((p) => (
-                  <li key={p.id} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="min-w-0 truncate">{p.nombre}</span>
-                    <span
-                      className={
-                        p.stock <= 0
-                          ? "shrink-0 font-semibold text-destructive"
-                          : "shrink-0 font-semibold"
-                      }
-                    >
-                      {p.stock} u.
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <Button asChild variant="outline" className="mt-5 w-full">
-                <Link to="/productos">Ver inventario completo</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      <section className="mt-6">
-        <h2 className="flex items-center gap-2 text-base font-semibold">
-          <BarChart3 className="h-4 w-4 text-primary" /> Historial de días cerrados
-        </h2>
-        <div className="mt-3">
-          <HistorialCierres cierres={cierres} />
-        </div>
-      </section>
-    </AppShell>
+        <section className="mt-6">
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <BarChart3 className="h-4 w-4 text-primary" /> Historial de días cerrados
+          </h2>
+          <div className="mt-3">
+            <HistorialCierres cierres={cierres} />
+          </div>
+        </section>
+      </AppShell>
+    </AdminGuard>
   );
 }
 
