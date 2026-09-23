@@ -236,7 +236,7 @@ const StoreContext = createContext<Store | null>(null);
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<Data>(vacio);
+  const [data, setData> = useState<Data>(vacio);
   const [hidratado, setHidratado] = useState(false);
   const remoto = useRef(false);
   const ultimaEscritura = useRef<string>("");
@@ -332,57 +332,103 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setData((d) => ({ ...d, productos: d.productos.filter((x) => x.id !== id) }));
   }, []);
 
+  // Descuenta stock de inmediato al crear el pedido pendiente
   const agregarPedido = useCallback(
     (cliente: string, telefono: string, fecha: string, items: ItemPedido[]) => {
-      setData((d) => ({
-        ...d,
-        pedidos: [
-          { id: uid(), cliente, telefono: telefono.trim() || undefined, fecha, items, estado: "pendiente" },
-          ...d.pedidos,
-        ],
-      }));
+      setData((d) => {
+        const productos = d.productos.map((prod) => {
+          const item = items.find((i) => i.productoId === prod.id);
+          return item ? { ...prod, stock: prod.stock - item.cantidad } : prod;
+        });
+        return {
+          ...d,
+          productos,
+          pedidos: [
+            { id: uid(), cliente, telefono: telefono.trim() || undefined, fecha, items, estado: "pendiente" },
+            ...d.pedidos,
+          ],
+        };
+      });
     },
     [],
   );
 
+  // Ajusta el stock si se modifican los productos/cantidades de un pedido pendiente existente
   const actualizarPedido = useCallback(
     (id: string, cliente: string, telefono: string, fecha: string, items: ItemPedido[]) => {
-      setData((d) => ({
-        ...d,
-        pedidos: d.pedidos.map((p) =>
-          p.id === id
-            ? {
-                ...p,
-                cliente: cliente.trim(),
-                telefono: telefono.trim() || undefined,
-                fecha,
-                items,
-              }
-            : p,
-        ),
-      }));
+      setData((d) => {
+        const pedidoAnterior = d.pedidos.find((p) => p.id === id);
+        if (!pedidoAnterior) return d;
+
+        // Revertir temporalmente el stock del pedido anterior si estaba pendiente
+        let productosTemp = [...d.productos];
+        if (pedidoAnterior.estado === "pendiente") {
+          productosTemp = productosTemp.map((prod) => {
+            const itemViejo = pedidoAnterior.items.find((i) => i.productoId === prod.id);
+            return itemViejo ? { ...prod, stock: prod.stock + itemViejo.cantidad } : prod;
+          });
+        }
+
+        // Aplicar los nuevos ítems
+        const productosFinales = productosTemp.map((prod) => {
+          const itemNuevo = items.find((i) => i.productoId === prod.id);
+          return itemNuevo
+            ? { ...prod, stock: pedidoAnterior.estado === "pendiente" ? prod.stock - itemNuevo.cantidad : prod.stock }
+            : prod;
+        });
+
+        return {
+          ...d,
+          productos: productosFinales,
+          pedidos: d.pedidos.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  cliente: cliente.trim(),
+                  telefono: telefono.trim() || undefined,
+                  fecha,
+                  items,
+                }
+              : p,
+          ),
+        };
+      });
     },
     [],
   );
 
+  // Al entregar el pedido, como el stock ya se descontó al crearlo, solo cambiamos el estado a entregado
   const entregarPedido = useCallback((id: string) => {
     setData((d) => {
       const pedido = d.pedidos.find((p) => p.id === id);
       if (!pedido || pedido.estado === "entregado") return d;
-      const productos = d.productos.map((prod) => {
-        const item = pedido.items.find((i) => i.productoId === prod.id);
-        return item ? { ...prod, stock: prod.stock - item.cantidad } : prod;
-      });
       return {
         ...d,
-        productos,
         pedidos: d.pedidos.map((p) => (p.id === id ? { ...p, estado: "entregado" as const } : p)),
       };
     });
   }, []);
 
+  // Al eliminar un pedido pendiente, devolvemos el stock al inventario
   const eliminarPedido = useCallback((id: string) => {
-    setData((d) => ({ ...d, pedidos: d.pedidos.filter((p) => p.id !== id) }));
+    setData((d) => {
+      const pedido = d.pedidos.find((p) => p.id === id);
+      if (!pedido) return d;
+
+      let productos = [...d.productos];
+      if (pedido.estado === "pendiente") {
+        productos = productos.map((prod) => {
+          const item = pedido.items.find((i) => i.productoId === prod.id);
+          return item ? { ...prod, stock: prod.stock + item.cantidad } : prod;
+        });
+      }
+
+      return {
+        ...d,
+        productos,
+        pedidos: d.pedidos.filter((p) => p.id !== id),
+      };
+    });
   }, []);
 
   const agregarInsumo = useCallback((i: Omit<Insumo, "id">) => {
