@@ -31,7 +31,7 @@ import {
 import { HistorialCierres } from "@/components/HistorialCierres";
 import { useStore, money, totalPedido, costoPedido } from "@/lib/store";
 import { toast } from "sonner";
-import { AdminGuard } from "@/components/AdminGuard";
+import { AdminGuard } from "@/components/adminguard";
 
 export const Route = createFileRoute("/")({
   head: () => ({
