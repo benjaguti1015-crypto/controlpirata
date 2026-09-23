@@ -236,7 +236,7 @@ const StoreContext = createContext<Store | null>(null);
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [data, setData> = useState<Data>(vacio);
+  const [data, setData] = useState<Data>(vacio);
   const [hidratado, setHidratado] = useState(false);
   const remoto = useRef(false);
   const ultimaEscritura = useRef<string>("");
@@ -332,7 +332,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setData((d) => ({ ...d, productos: d.productos.filter((x) => x.id !== id) }));
   }, []);
 
-  // Descuenta stock de inmediato al crear el pedido pendiente
   const agregarPedido = useCallback(
     (cliente: string, telefono: string, fecha: string, items: ItemPedido[]) => {
       setData((d) => {
@@ -353,14 +352,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Ajusta el stock si se modifican los productos/cantidades de un pedido pendiente existente
   const actualizarPedido = useCallback(
     (id: string, cliente: string, telefono: string, fecha: string, items: ItemPedido[]) => {
       setData((d) => {
         const pedidoAnterior = d.pedidos.find((p) => p.id === id);
         if (!pedidoAnterior) return d;
 
-        // Revertir temporalmente el stock del pedido anterior si estaba pendiente
         let productosTemp = [...d.productos];
         if (pedidoAnterior.estado === "pendiente") {
           productosTemp = productosTemp.map((prod) => {
@@ -369,7 +366,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           });
         }
 
-        // Aplicar los nuevos ítems
         const productosFinales = productosTemp.map((prod) => {
           const itemNuevo = items.find((i) => i.productoId === prod.id);
           return itemNuevo
@@ -397,7 +393,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Al entregar el pedido, como el stock ya se descontó al crearlo, solo cambiamos el estado a entregado
   const entregarPedido = useCallback((id: string) => {
     setData((d) => {
       const pedido = d.pedidos.find((p) => p.id === id);
@@ -409,7 +404,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Al eliminar un pedido pendiente, devolvemos el stock al inventario
   const eliminarPedido = useCallback((id: string) => {
     setData((d) => {
       const pedido = d.pedidos.find((p) => p.id === id);
