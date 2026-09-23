@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStore, money, totalPedido, type ItemPedido, type Pedido } from "@/lib/store";
+import { AdminGuard } from "@/components/adminguard";
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -208,60 +209,153 @@ function PedidosPage() {
   };
 
   return (
-    <AppShell>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold">Pedidos</h1>
-          <p className="text-sm text-muted-foreground">Registro, seguimiento y entrega</p>
+    <AdminGuard>
+      <AppShell>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-semibold">Pedidos</h1>
+            <p className="text-sm text-muted-foreground">Registro, seguimiento y entrega</p>
+          </div>
+          <Button onClick={abrirNuevo} className="shrink-0" disabled={productos.length === 0}>
+            <Plus className="h-4 w-4" /> Pedido
+          </Button>
         </div>
-        <Button onClick={abrirNuevo} className="shrink-0" disabled={productos.length === 0}>
-          <Plus className="h-4 w-4" /> Pedido
-        </Button>
-      </div>
 
-      {productos.length === 0 ? (
-        <div className="mt-6">
-          <EmptyState
-            icon={Package}
-            title="Primero registra tus galletas"
-            description="Necesitas al menos un producto en el inventario para poder crear pedidos."
-            action={
-              <Button asChild>
-                <Link to="/productos">Ir al inventario</Link>
-              </Button>
-            }
-          />
-        </div>
-      ) : (
-        <Tabs defaultValue="pendientes" className="mt-6">
-          <TabsList className="w-full">
-            <TabsTrigger value="pendientes" className="flex-1">
-              Pendientes ({pendientes.length})
-            </TabsTrigger>
-            <TabsTrigger value="entregados" className="flex-1">
-              Entregados ({entregados.length})
-            </TabsTrigger>
-          </TabsList>
+        {productos.length === 0 ? (
+          <div className="mt-6">
+            <EmptyState
+              icon={Package}
+              title="Primero registra tus galletas"
+              description="Necesitas al menos un producto en el inventario para poder crear pedidos."
+              action={
+                <Button asChild>
+                  <Link to="/productos">Ir al inventario</Link>
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <Tabs defaultValue="pendientes" className="mt-6">
+            <TabsList className="w-full">
+              <TabsTrigger value="pendientes" className="flex-1">
+                Pendientes ({pendientes.length})
+              </TabsTrigger>
+              <TabsTrigger value="entregados" className="flex-1">
+                Entregados ({entregados.length})
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="pendientes" className="mt-4 space-y-3">
-            {pendientes.length === 0 ? (
-              <EmptyState
-                icon={ClipboardList}
-                title="No hay pedidos pendientes"
-                description="Cuando registres un pedido aparecerá aquí hasta que lo marques como entregado."
-                action={
-                  <Button onClick={abrirNuevo}>
-                    <Plus className="h-4 w-4" /> Registrar pedido
-                  </Button>
-                }
-              />
-            ) : (
-              pendientes.map((p) => {
-                const insuficiente = p.items.some((i) => {
-                  const prod = productos.find((x) => x.id === i.productoId);
-                  return !prod || i.cantidad > prod.stock;
-                });
-                return (
+            <TabsContent value="pendientes" className="mt-4 space-y-3">
+              {pendientes.length === 0 ? (
+                <EmptyState
+                  icon={ClipboardList}
+                  title="No hay pedidos pendientes"
+                  description="Cuando registres un pedido aparecerá aquí hasta que lo marques como entregado."
+                  action={
+                    <Button onClick={abrirNuevo}>
+                      <Plus className="h-4 w-4" /> Registrar pedido
+                    </Button>
+                  }
+                />
+              ) : (
+                pendientes.map((p) => {
+                  const insuficiente = p.items.some((i) => {
+                    const prod = productos.find((x) => x.id === i.productoId);
+                    return !prod || i.cantidad > prod.stock;
+                  });
+                  return (
+                    <Card key={p.id}>
+                      <CardContent className="p-4">
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                          <div className="min-w-0">
+                            <h2 className="truncate text-base font-semibold">{p.cliente}</h2>
+                            <p className="text-xs text-muted-foreground">{p.fecha}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <p className="shrink-0 font-semibold">{money(totalPedido(p))}</p>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              onClick={() => abrirEditar(p)}
+                              title="Editar pedido"
+                            >
+                              <Pencil className="h-4 w-4" />
+                              <span className="sr-only">Editar pedido</span>
+                            </Button>
+                          </div>
+                        </div>
+
+                        <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
+                          {p.items.map((i) => (
+                            <li key={i.productoId} className="flex justify-between gap-3">
+                              <span className="truncate">
+                                {i.cantidad} × {i.nombre}
+                              </span>
+                              <span className="shrink-0">{money(i.precio * i.cantidad)}</span>
+                            </li>
+                          ))}
+                        </ul>
+
+                        {insuficiente ? (
+                          <Badge variant="destructive" className="mt-3">
+                            <TriangleAlert className="h-3 w-3" /> Stock insuficiente
+                          </Badge>
+                        ) : null}
+
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          <Button
+                            variant="outline"
+                            className="gap-2"
+                            onClick={() => abrirWhatsApp(p)}
+                          >
+                            <WhatsAppIcon className="h-4 w-4" /> WhatsApp
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="gap-2"
+                            onClick={() => copiarResumenInstagram(p)}
+                          >
+                            <Instagram className="h-4 w-4" /> Copiar
+                          </Button>
+                          <Button
+                            className="flex-1"
+                            onClick={() => {
+                              entregarPedido(p.id);
+                              toast.success("Pedido entregado y stock descontado");
+                            }}
+                          >
+                            <CheckCircle2 className="h-4 w-4" /> Entregar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={() => {
+                              eliminarPedido(p.id);
+                              toast.success("Pedido eliminado");
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                            <span className="sr-only">Eliminar pedido</span>
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
+            </TabsContent>
+
+            <TabsContent value="entregados" className="mt-4 space-y-3">
+              {entregados.length === 0 ? (
+                <EmptyState
+                  icon={ShoppingBag}
+                  title="Todavía no hay entregas"
+                  description="Los pedidos entregados suman a tus ingresos y utilidades del panel."
+                />
+              ) : (
+                entregados.map((p) => (
                   <Card key={p.id}>
                     <CardContent className="p-4">
                       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
@@ -269,37 +363,20 @@ function PedidosPage() {
                           <h2 className="truncate text-base font-semibold">{p.cliente}</h2>
                           <p className="text-xs text-muted-foreground">{p.fecha}</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <p className="shrink-0 font-semibold">{money(totalPedido(p))}</p>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                            onClick={() => abrirEditar(p)}
-                            title="Editar pedido"
-                          >
-                            <Pencil className="h-4 w-4" />
-                            <span className="sr-only">Editar pedido</span>
-                          </Button>
+                        <div className="shrink-0 text-right">
+                          <p className="font-semibold">{money(totalPedido(p))}</p>
+                          <Badge variant="secondary" className="mt-1">
+                            Entregado
+                          </Badge>
                         </div>
                       </div>
-
                       <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
                         {p.items.map((i) => (
-                          <li key={i.productoId} className="flex justify-between gap-3">
-                            <span className="truncate">
-                              {i.cantidad} × {i.nombre}
-                            </span>
-                            <span className="shrink-0">{money(i.precio * i.cantidad)}</span>
+                          <li key={i.productoId} className="truncate">
+                            {i.cantidad} × {i.nombre}
                           </li>
                         ))}
                       </ul>
-
-                      {insuficiente ? (
-                        <Badge variant="destructive" className="mt-3">
-                          <TriangleAlert className="h-3 w-3" /> Stock insuficiente
-                        </Badge>
-                      ) : null}
 
                       <div className="mt-4 grid grid-cols-2 gap-2">
                         <Button
@@ -316,240 +393,166 @@ function PedidosPage() {
                         >
                           <Instagram className="h-4 w-4" /> Copiar
                         </Button>
-                        <Button
-                          className="flex-1"
-                          onClick={() => {
-                            entregarPedido(p.id);
-                            toast.success("Pedido entregado y stock descontado");
-                          }}
-                        >
-                          <CheckCircle2 className="h-4 w-4" /> Entregar
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="shrink-0"
-                          onClick={() => {
-                            eliminarPedido(p.id);
-                            toast.success("Pedido eliminado");
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                          <span className="sr-only">Eliminar pedido</span>
-                        </Button>
                       </div>
                     </CardContent>
                   </Card>
-                );
-              })
-            )}
-          </TabsContent>
+                ))
+              )}
+            </TabsContent>
+          </Tabs>
+        )}
 
-          <TabsContent value="entregados" className="mt-4 space-y-3">
-            {entregados.length === 0 ? (
-              <EmptyState
-                icon={ShoppingBag}
-                title="Todavía no hay entregas"
-                description="Los pedidos entregados suman a tus ingresos y utilidades del panel."
-              />
-            ) : (
-              entregados.map((p) => (
-                <Card key={p.id}>
-                  <CardContent className="p-4">
-                    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
-                      <div className="min-w-0">
-                        <h2 className="truncate text-base font-semibold">{p.cliente}</h2>
-                        <p className="text-xs text-muted-foreground">{p.fecha}</p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="font-semibold">{money(totalPedido(p))}</p>
-                        <Badge variant="secondary" className="mt-1">
-                          Entregado
-                        </Badge>
-                      </div>
-                    </div>
-                    <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
-                      {p.items.map((i) => (
-                        <li key={i.productoId} className="truncate">
-                          {i.cantidad} × {i.nombre}
-                        </li>
-                      ))}
-                    </ul>
+        <Dialog open={abierto} onOpenChange={setAbierto}>
+          <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{pedidoEditando ? "Editar pedido" : "Nuevo pedido"}</DialogTitle>
+              <DialogDescription>
+                {pedidoEditando ? "Modifica los productos o datos del pedido." : "Agrega uno o varios productos al mismo pedido."}
+              </DialogDescription>
+            </DialogHeader>
 
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      <Button
-                        variant="outline"
-                        className="gap-2"
-                        onClick={() => abrirWhatsApp(p)}
-                      >
-                        <WhatsAppIcon className="h-4 w-4" /> WhatsApp
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="gap-2"
-                        onClick={() => copiarResumenInstagram(p)}
-                      >
-                        <Instagram className="h-4 w-4" /> Copiar
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
-        </Tabs>
-      )}
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="cliente">Cliente</Label>
+                <Input
+                  id="cliente"
+                  value={cliente}
+                  onChange={(e) => setCliente(e.target.value)}
+                  placeholder="Nombre del cliente"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="telefono">Teléfono (opcional)</Label>
+                <Input
+                  id="telefono"
+                  type="tel"
+                  value={telefono}
+                  onChange={(e) => setTelefono(e.target.value)}
+                  placeholder="+56912345678 para WhatsApp"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Se usa para generar el enlace de WhatsApp.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="fecha">Fecha del pedido</Label>
+                <Input
+                  id="fecha"
+                  type="date"
+                  value={fecha}
+                  onChange={(e) => setFecha(e.target.value)}
+                />
+              </div>
 
-      <Dialog open={abierto} onOpenChange={setAbierto}>
-        <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{pedidoEditando ? "Editar pedido" : "Nuevo pedido"}</DialogTitle>
-            <DialogDescription>
-              {pedidoEditando ? "Modifica los productos o datos del pedido." : "Agrega uno o varios productos al mismo pedido."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="cliente">Cliente</Label>
-              <Input
-                id="cliente"
-                value={cliente}
-                onChange={(e) => setCliente(e.target.value)}
-                placeholder="Nombre del cliente"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="telefono">Teléfono (opcional)</Label>
-              <Input
-                id="telefono"
-                type="tel"
-                value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
-                placeholder="+56912345678 para WhatsApp"
-              />
-              <p className="text-xs text-muted-foreground">
-                Se usa para generar el enlace de WhatsApp.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="fecha">Fecha del pedido</Label>
-              <Input
-                id="fecha"
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Productos</Label>
-              {lineas.map((l, idx) => {
-                const prod = productos.find((p) => p.id === l.productoId);
-                const cant = Number(l.cantidad);
-                const falta = !!prod && Number.isFinite(cant) && cant > prod.stock;
-                return (
-                  <div key={idx} className="rounded-xl border border-border bg-card p-3">
-                    <div className="flex gap-2">
-                      <Select
-                        value={l.productoId}
-                        onValueChange={(v) =>
-                          setLineas(
-                            lineas.map((x, i) => (i === idx ? { ...x, productoId: v } : x)),
-                          )
-                        }
-                      >
-                        <SelectTrigger className="min-w-0 flex-1">
-                          <SelectValue placeholder="Elegir galleta" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {productos.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.nombre} · {p.stock} u.
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        min={1}
-                        step={1}
-                        className="w-20 shrink-0"
-                        value={l.cantidad}
-                        onChange={(e) =>
-                          setLineas(
-                            lineas.map((x, i) =>
-                              i === idx ? { ...x, cantidad: e.target.value } : x,
-                            ),
-                          )
-                        }
-                      />
-                      {lineas.length > 1 ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="shrink-0"
-                          onClick={() => setLineas(lineas.filter((_, i) => i !== idx))}
+              <div className="space-y-2">
+                <Label>Productos</Label>
+                {lineas.map((l, idx) => {
+                  const prod = productos.find((p) => p.id === l.productoId);
+                  const cant = Number(l.cantidad);
+                  const falta = !!prod && Number.isFinite(cant) && cant > prod.stock;
+                  return (
+                    <div key={idx} className="rounded-xl border border-border bg-card p-3">
+                      <div className="flex gap-2">
+                        <Select
+                          value={l.productoId}
+                          onValueChange={(v) =>
+                            setLineas(
+                              lineas.map((x, i) => (i === idx ? { ...x, productoId: v } : x)),
+                            )
+                          }
                         >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                          <span className="sr-only">Quitar</span>
-                        </Button>
+                          <SelectTrigger className="min-w-0 flex-1">
+                            <SelectValue placeholder="Elegir galleta" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {productos.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.nombre} · {p.stock} u.
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          min={1}
+                          step={1}
+                          className="w-20 shrink-0"
+                          value={l.cantidad}
+                          onChange={(e) =>
+                            setLineas(
+                              lineas.map((x, i) =>
+                                i === idx ? { ...x, cantidad: e.target.value } : x,
+                              ),
+                            )
+                          }
+                        />
+                        {lineas.length > 1 ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0"
+                            onClick={() => setLineas(lineas.filter((_, i) => i !== idx))}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                            <span className="sr-only">Quitar</span>
+                          </Button>
+                        ) : null}
+                      </div>
+                      {falta ? (
+                        <p className="mt-2 flex items-center gap-1 text-xs text-destructive">
+                          <TriangleAlert className="h-3 w-3" /> Solo hay {prod?.stock} unidades en
+                          stock
+                        </p>
                       ) : null}
                     </div>
-                    {falta ? (
-                      <p className="mt-2 flex items-center gap-1 text-xs text-destructive">
-                        <TriangleAlert className="h-3 w-3" /> Solo hay {prod?.stock} unidades en
-                        stock
-                      </p>
-                    ) : null}
-                  </div>
-                );
-              })}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setLineas([...lineas, { productoId: "", cantidad: "1" }])}
-              >
-                <Plus className="h-4 w-4" /> Agregar otro producto
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setLineas([...lineas, { productoId: "", cantidad: "1" }])}
+                >
+                  <Plus className="h-4 w-4" /> Agregar otro producto
+                </Button>
+              </div>
+
+              <div className="rounded-xl bg-secondary/70 px-3 py-2 text-sm">
+                Total del pedido: <span className="font-semibold">{money(totalBorrador)}</span>
+              </div>
+
+              {hayFaltaStock ? (
+                <label className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-xs">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 accent-[oklch(0.55_0.19_27)]"
+                    checked={confirmarStock}
+                    onChange={(e) => setConfirmarStock(e.target.checked)}
+                  />
+                  <span>
+                    El stock es insuficiente para algunos productos. Confirmo que quiero registrar el
+                    pedido de todos modos.
+                  </span>
+                </label>
+              ) : null}
+
+              {errores.length > 0 ? (
+                <ul className="space-y-1 text-xs text-destructive">
+                  {errores.map((e) => (
+                    <li key={e}>{e}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAbierto(false)}>
+                Cancelar
               </Button>
-            </div>
-
-            <div className="rounded-xl bg-secondary/70 px-3 py-2 text-sm">
-              Total del pedido: <span className="font-semibold">{money(totalBorrador)}</span>
-            </div>
-
-            {hayFaltaStock ? (
-              <label className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-xs">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 accent-[oklch(0.55_0.19_27)]"
-                  checked={confirmarStock}
-                  onChange={(e) => setConfirmarStock(e.target.checked)}
-                />
-                <span>
-                  El stock es insuficiente para algunos productos. Confirmo que quiero registrar el
-                  pedido de todos modos.
-                </span>
-              </label>
-            ) : null}
-
-            {errores.length > 0 ? (
-              <ul className="space-y-1 text-xs text-destructive">
-                {errores.map((e) => (
-                  <li key={e}>{e}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAbierto(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={guardar}>{pedidoEditando ? "Guardar cambios" : "Registrar pedido"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </AppShell>
+              <Button onClick={guardar}>{pedidoEditando ? "Guardar cambios" : "Registrar pedido"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </AppShell>
+    </AdminGuard>
   );
 }
