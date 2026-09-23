@@ -111,6 +111,12 @@ function MillarayPage() {
     [ventasMillaray],
   );
 
+  // Filtramos para mostrar únicamente las ventas que NO están pagadas (al pagarlas, desaparecen de la vista)
+  const ventasPendientes = useMemo(
+    () => ventasMillaray.filter((v) => !v.pagado),
+    [ventasMillaray]
+  );
+
   const abrir = (a: Accion, p: Producto) => {
     setAccion(a);
     setProducto(p);
@@ -242,45 +248,38 @@ function MillarayPage() {
         </Card>
       </div>
 
-      {/* Ventas registradas */}
+      {/* Ventas pendientes */}
       <section className="mt-7">
-        <h2 className="text-lg font-semibold">Ventas del punto de venta</h2>
+        <h2 className="text-lg font-semibold">Ventas pendientes de pago</h2>
         <p className="text-xs text-muted-foreground">
-          Marca la casilla cuando el cliente ya haya pagado
+          Al marcar la casilla de pagado, el pedido desaparecerá de esta lista
         </p>
 
         <div className="mt-3 space-y-2">
-          {ventasMillaray.length === 0 ? (
+          {ventasPendientes.length === 0 ? (
             <Card>
               <CardContent className="p-4">
                 <p className="text-sm text-muted-foreground">
-                  Aún no hay ventas registradas. Usa “Registrar venta” para anotar la primera.
+                  No hay ventas pendientes por cobrar. ¡Todo al día!
                 </p>
               </CardContent>
             </Card>
           ) : (
-            ventasMillaray.map((v) => (
-              <Card key={v.id} className={v.pagado ? "opacity-70" : undefined}>
+            ventasPendientes.map((v) => (
+              <Card key={v.id}>
                 <CardContent className="flex items-center gap-3 p-3">
                   <Checkbox
                     id={`pagado-${v.id}`}
                     checked={v.pagado}
-                    onCheckedChange={() => marcarVentaMillarayPagada(v.id)}
-                    aria-label={v.pagado ? "Marcar como pendiente de pago" : "Marcar como pagado"}
+                    onCheckedChange={() => {
+                      marcarVentaMillarayPagada(v.id);
+                      toast.success("Venta marcada como pagada");
+                    }}
+                    aria-label="Marcar como pagado"
                   />
                   <div className="min-w-0 flex-1">
-                    <p
-                      className={`truncate text-sm font-semibold ${
-                        v.pagado ? "text-muted-foreground line-through" : ""
-                      }`}
-                    >
-                      {v.cliente}
-                    </p>
-                    <p
-                      className={`text-xs ${
-                        v.pagado ? "text-muted-foreground/80 line-through" : "text-muted-foreground"
-                      }`}
-                    >
+                    <p className="truncate text-sm font-semibold">{v.cliente}</p>
+                    <p className="text-xs text-muted-foreground">
                       {v.cantidad} u. · {v.nombre}
                     </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -292,25 +291,11 @@ function MillarayPage() {
                         )}
                         {v.metodoPago === "efectivo" ? "Efectivo" : "Transferencia"}
                       </Badge>
-                      <Badge variant={v.pagado ? "default" : "secondary"}>
-                        {v.pagado ? (
-                          <>
-                            <Check className="h-3 w-3" /> Pagado
-                          </>
-                        ) : (
-                          "Pendiente de pago"
-                        )}
-                      </Badge>
+                      <Badge variant="secondary">Pendiente de pago</Badge>
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
-                    <p
-                      className={`text-sm font-semibold ${
-                        v.pagado ? "text-muted-foreground line-through" : ""
-                      }`}
-                    >
-                      {money(v.precio * v.cantidad)}
-                    </p>
+                    <p className="text-sm font-semibold">{money(v.precio * v.cantidad)}</p>
                     <Button
                       variant="ghost"
                       size="icon"
