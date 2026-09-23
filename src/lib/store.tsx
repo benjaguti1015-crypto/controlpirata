@@ -201,6 +201,13 @@ type Store = {
     fecha: string,
     items: ItemPedido[],
   ) => void;
+  actualizarPedido: (
+    id: string,
+    cliente: string,
+    telefono: string,
+    fecha: string,
+    items: ItemPedido[],
+  ) => void;
   entregarPedido: (id: string) => void;
   eliminarPedido: (id: string) => void;
   cerrarDia: () => Cierre | null;
@@ -234,7 +241,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const remoto = useRef(false);
   const ultimaEscritura = useRef<string>("");
 
-  // Carga inicial desde la nube; si la nube está vacía, migra lo que haya en localStorage
   useEffect(() => {
     let cancelado = false;
     (async () => {
@@ -270,9 +276,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Suscripción en tiempo real: cambios hechos por otras personas aparecen al instante.
-  // Se ignoran ecos antiguos (updated_at <= última escritura conocida) para que una
-  // actualización vieja nunca pise cambios locales recientes.
   useEffect(() => {
     const channel = supabase
       .channel("app_state_sync")
@@ -295,7 +298,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Guardar en la nube (y respaldo local) cuando cambian los datos
   useEffect(() => {
     if (!hidratado) return;
     try {
@@ -338,6 +340,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { id: uid(), cliente, telefono: telefono.trim() || undefined, fecha, items, estado: "pendiente" },
           ...d.pedidos,
         ],
+      }));
+    },
+    [],
+  );
+
+  const actualizarPedido = useCallback(
+    (id: string, cliente: string, telefono: string, fecha: string, items: ItemPedido[]) => {
+      setData((d) => ({
+        ...d,
+        pedidos: d.pedidos.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                cliente: cliente.trim(),
+                telefono: telefono.trim() || undefined,
+                fecha,
+                items,
+              }
+            : p,
+        ),
       }));
     },
     [],
@@ -605,6 +627,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       actualizarProducto,
       eliminarProducto,
       agregarPedido,
+      actualizarPedido,
       entregarPedido,
       eliminarPedido,
       cerrarDia,
@@ -629,6 +652,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       actualizarProducto,
       eliminarProducto,
       agregarPedido,
+      actualizarPedido,
       entregarPedido,
       eliminarPedido,
       cerrarDia,

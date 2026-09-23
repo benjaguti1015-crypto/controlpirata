@@ -5,6 +5,7 @@ import {
   ClipboardList,
   Instagram,
   Package,
+  Pencil,
   Plus,
   ShoppingBag,
   Trash2,
@@ -72,8 +73,9 @@ export const Route = createFileRoute("/pedidos")({
 type Borrador = { productoId: string; cantidad: string };
 
 function PedidosPage() {
-  const { productos, pedidos, agregarPedido, entregarPedido, eliminarPedido } = useStore();
+  const { productos, pedidos, agregarPedido, actualizarPedido, entregarPedido, eliminarPedido } = useStore();
   const [abierto, setAbierto] = useState(false);
+  const [pedidoEditando, setPedidoEditando] = useState<Pedido | null>(null);
   const [cliente, setCliente] = useState("");
   const [telefono, setTelefono] = useState("");
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
@@ -101,10 +103,27 @@ function PedidosPage() {
   }, 0);
 
   const abrirNuevo = () => {
+    setPedidoEditando(null);
     setCliente("");
     setTelefono("");
     setFecha(new Date().toISOString().slice(0, 10));
     setLineas([{ productoId: "", cantidad: "1" }]);
+    setErrores([]);
+    setConfirmarStock(false);
+    setAbierto(true);
+  };
+
+  const abrirEditar = (p: Pedido) => {
+    setPedidoEditando(p);
+    setCliente(p.cliente);
+    setTelefono(p.telefono || "");
+    setFecha(p.fecha);
+    setLineas(
+      p.items.map((i) => ({
+        productoId: i.productoId,
+        cantidad: String(i.cantidad),
+      }))
+    );
     setErrores([]);
     setConfirmarStock(false);
     setAbierto(true);
@@ -145,8 +164,13 @@ function PedidosPage() {
       return;
     }
 
-    agregarPedido(cliente.trim(), telefono.trim(), fecha, items);
-    toast.success("Pedido registrado");
+    if (pedidoEditando) {
+      actualizarPedido(pedidoEditando.id, cliente.trim(), telefono.trim(), fecha, items);
+      toast.success("Pedido actualizado");
+    } else {
+      agregarPedido(cliente.trim(), telefono.trim(), fecha, items);
+      toast.success("Pedido registrado");
+    }
     setAbierto(false);
   };
 
@@ -245,7 +269,19 @@ function PedidosPage() {
                           <h2 className="truncate text-base font-semibold">{p.cliente}</h2>
                           <p className="text-xs text-muted-foreground">{p.fecha}</p>
                         </div>
-                        <p className="shrink-0 font-semibold">{money(totalPedido(p))}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="shrink-0 font-semibold">{money(totalPedido(p))}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => abrirEditar(p)}
+                            title="Editar pedido"
+                          >
+                            <Pencil className="h-4 w-4" />
+                            <span className="sr-only">Editar pedido</span>
+                          </Button>
+                        </div>
                       </div>
 
                       <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
@@ -367,8 +403,10 @@ function PedidosPage() {
       <Dialog open={abierto} onOpenChange={setAbierto}>
         <DialogContent className="max-h-[90vh] max-w-md overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nuevo pedido</DialogTitle>
-            <DialogDescription>Agrega uno o varios productos al mismo pedido.</DialogDescription>
+            <DialogTitle>{pedidoEditando ? "Editar pedido" : "Nuevo pedido"}</DialogTitle>
+            <DialogDescription>
+              {pedidoEditando ? "Modifica los productos o datos del pedido." : "Agrega uno o varios productos al mismo pedido."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
@@ -508,7 +546,7 @@ function PedidosPage() {
             <Button variant="outline" onClick={() => setAbierto(false)}>
               Cancelar
             </Button>
-            <Button onClick={guardar}>Registrar pedido</Button>
+            <Button onClick={guardar}>{pedidoEditando ? "Guardar cambios" : "Registrar pedido"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
