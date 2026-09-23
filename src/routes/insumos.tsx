@@ -64,7 +64,8 @@ function InsumosPage() {
     setForm({
       nombre: i.nombre,
       stock: String(i.stock),
-      unidad: i.unidad,
+      // Si por alguna razón antigua tuviera otra unidad, por seguridad la mapeamos o dejamos 'g'
+      unidad: i.unidad === "u" ? "u" : "g",
       minimo: String(i.minimo),
     });
     setErrores({});
@@ -74,17 +75,20 @@ function InsumosPage() {
   const guardar = () => {
     const e: Partial<Record<keyof FormState, string>> = {};
     if (!form.nombre.trim()) e.nombre = "El nombre es obligatorio";
-    if (!form.unidad.trim()) e.unidad = "Indica la unidad de medida";
+    if (form.unidad !== "g" && form.unidad !== "u") e.unidad = "Selecciona una unidad válida";
+    
     const stock = Number(form.stock);
     const minimo = Number(form.minimo);
+    
     if (form.stock === "" || !Number.isFinite(stock))
       e.stock = "Ingresa un stock válido (puede ser negativo)";
     if (form.minimo === "" || !Number.isFinite(minimo) || minimo < 0)
       e.minimo = "Ingresa un mínimo válido (0 o mayor)";
+    
     setErrores(e);
     if (Object.keys(e).length) return;
 
-    const payload = { nombre: form.nombre.trim(), stock, unidad: form.unidad.trim(), minimo };
+    const payload = { nombre: form.nombre.trim(), stock, unidad: form.unidad, minimo };
     if (editando) {
       actualizarInsumo(editando.id, payload);
       toast.success("Insumo actualizado");
@@ -201,7 +205,7 @@ function InsumosPage() {
           <DialogHeader>
             <DialogTitle>{editando ? "Editar insumo" : "Nuevo insumo"}</DialogTitle>
             <DialogDescription>
-              Define la unidad de medida que usarás en las recetas.
+              Define la unidad de medida que usarás en las recetas (Gramos o Unidades).
             </DialogDescription>
           </DialogHeader>
 
@@ -212,7 +216,7 @@ function InsumosPage() {
                 id="insumo-nombre"
                 value={form.nombre}
                 onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-                placeholder="Azúcar"
+                placeholder="Azúcar o Bolsas"
               />
               {errores.nombre ? <p className="text-xs text-destructive">{errores.nombre}</p> : null}
             </div>
@@ -231,12 +235,15 @@ function InsumosPage() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="insumo-unidad">Unidad</Label>
-                <Input
+                <select
                   id="insumo-unidad"
                   value={form.unidad}
                   onChange={(e) => setForm({ ...form, unidad: e.target.value })}
-                  placeholder="g, kg, ml, u."
-                />
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="g">Gramos (g)</option>
+                  <option value="u">Unidades (u)</option>
+                </select>
                 {errores.unidad ? (
                   <p className="text-xs text-destructive">{errores.unidad}</p>
                 ) : null}
