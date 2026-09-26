@@ -26,7 +26,7 @@ function DatosPagoPage() {
     tipoCuenta: "Cuenta Vista",
     rut: "21.689.819-2",
     nroCuenta: "1058724274",
-    nombre: "Dulces del Rey Pirata",
+    nombre: "Benjamin Gutierrez",
   };
 
   const copiarTexto = (texto: string, campo: string) => {
