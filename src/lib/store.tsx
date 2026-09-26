@@ -1,4 +1,4 @@
-import {
+iimport {
   createContext,
   useCallback,
   useContext,
@@ -47,6 +47,7 @@ export type Pedido = {
   fecha: string;
   items: ItemPedido[];
   estado: "pendiente" | "entregado";
+  descuento?: number; // Porcentaje de descuento opcional (ej: 50 para 50%)
 };
 
 export type VentaMillaray = {
@@ -116,7 +117,8 @@ const isPedido = (v: unknown): v is Pedido => {
     (p.telefono === undefined || typeof p.telefono === "string") &&
     typeof p.fecha === "string" &&
     Array.isArray(p.items) &&
-    (p.estado === "pendiente" || p.estado === "entregado")
+    (p.estado === "pendiente" || p.estado === "entregado") &&
+    (p.descuento === undefined || typeof p.descuento === "number")
   );
 };
 
@@ -200,6 +202,7 @@ type Store = {
     telefono: string,
     fecha: string,
     items: ItemPedido[],
+    descuento?: number,
   ) => void;
   actualizarPedido: (
     id: string,
@@ -207,6 +210,7 @@ type Store = {
     telefono: string,
     fecha: string,
     items: ItemPedido[],
+    descuento?: number,
   ) => void;
   entregarPedido: (id: string) => void;
   eliminarPedido: (id: string) => void;
@@ -333,7 +337,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const agregarPedido = useCallback(
-    (cliente: string, telefono: string, fecha: string, items: ItemPedido[]) => {
+    (cliente: string, telefono: string, fecha: string, items: ItemPedido[], descuento?: number) => {
       setData((d) => {
         const productos = d.productos.map((prod) => {
           const item = items.find((i) => i.productoId === prod.id);
@@ -343,7 +347,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ...d,
           productos,
           pedidos: [
-            { id: uid(), cliente, telefono: telefono.trim() || undefined, fecha, items, estado: "pendiente" },
+            { id: uid(), cliente, telefono: telefono.trim() || undefined, fecha, items, estado: "pendiente", descuento },
             ...d.pedidos,
           ],
         };
@@ -353,7 +357,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const actualizarPedido = useCallback(
-    (id: string, cliente: string, telefono: string, fecha: string, items: ItemPedido[]) => {
+    (id: string, cliente: string, telefono: string, fecha: string, items: ItemPedido[], descuento?: number) => {
       setData((d) => {
         const pedidoAnterior = d.pedidos.find((p) => p.id === id);
         if (!pedidoAnterior) return d;
@@ -384,6 +388,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   telefono: telefono.trim() || undefined,
                   fecha,
                   items,
+                  descuento,
                 }
               : p,
           ),
@@ -596,11 +601,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  // Corrige la devolución de stock al eliminar una venta de Millaray
   const eliminarVentaMillaray = useCallback((id: string) => {
-    setData((d) => ({
-      ...d,
-      ventasMillaray: d.ventasMillaray.filter((v) => v.id !== id),
-    }));
+    setData((d) => {
+      const venta = d.ventasMillaray.find((v) => v.id === id);
+      if (!venta) return { ...d, ventasMillaray: d.ventasMillaray.filter((v) => v.id !== id) };
+
+      // Devolver stock al punto de venta de Millaray
+      const productos = d.productos.map((p) =>
+        p.id === venta.productoId
+          ? { ...p, millaray: (p.millaray ?? 0) + venta.cantidad }
+          : p
+      );
+
+      return {
+        ...d,
+        productos,
+        ventasMillaray: d.ventasMillaray.filter((v) => v.id !== id),
+      };
+    });
   }, []);
 
   const cerrarDia = useCallback(() => {
@@ -725,8 +744,11 @@ export const money = (n: number) =>
   new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 })
     .format(Number.isFinite(n) ? n : 0);
 
-export const totalPedido = (p: Pedido) =>
-  p.items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+export const totalPedido = (p: Pedido) => {
+  const subtotal = p.items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+  const desc = p.descuento && p.descuento > 0 ? (subtotal * p.descuento) / 100 : 0;
+  return Math.max(0, subtotal - desc);
+};
 
 export const costoPedido = (p: Pedido) =>
   p.items.reduce((s, i) => s + i.costo * i.cantidad, 0);

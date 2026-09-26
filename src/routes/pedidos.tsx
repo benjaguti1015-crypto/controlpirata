@@ -80,6 +80,7 @@ function PedidosPage() {
   const [cliente, setCliente] = useState("");
   const [telefono, setTelefono] = useState("");
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  const [descuento, setDescuento] = useState("");
   const [lineas, setLineas] = useState<Borrador[]>([{ productoId: "", cantidad: "1" }]);
   const [errores, setErrores] = useState<string[]>([]);
   const [confirmarStock, setConfirmarStock] = useState(false);
@@ -97,17 +98,21 @@ function PedidosPage() {
     [lineas, productos],
   );
 
-  const totalBorrador = lineas.reduce((s, l) => {
+  const subtotalBorrador = lineas.reduce((s, l) => {
     const prod = productos.find((p) => p.id === l.productoId);
     const cant = Number(l.cantidad);
     return s + (prod && Number.isFinite(cant) && cant > 0 ? prod.precio * cant : 0);
   }, 0);
+
+  const descuentoNum = Number(descuento) || 0;
+  const totalBorrador = Math.max(0, subtotalBorrador - (subtotalBorrador * descuentoNum) / 100);
 
   const abrirNuevo = () => {
     setPedidoEditando(null);
     setCliente("");
     setTelefono("");
     setFecha(new Date().toISOString().slice(0, 10));
+    setDescuento("");
     setLineas([{ productoId: "", cantidad: "1" }]);
     setErrores([]);
     setConfirmarStock(false);
@@ -119,6 +124,7 @@ function PedidosPage() {
     setCliente(p.cliente);
     setTelefono(p.telefono || "");
     setFecha(p.fecha);
+    setDescuento(p.descuento ? String(p.descuento) : "");
     setLineas(
       p.items.map((i) => ({
         productoId: i.productoId,
@@ -165,11 +171,13 @@ function PedidosPage() {
       return;
     }
 
+    const valDescuento = descuento.trim() === "" ? undefined : Number(descuento);
+
     if (pedidoEditando) {
-      actualizarPedido(pedidoEditando.id, cliente.trim(), telefono.trim(), fecha, items);
+      actualizarPedido(pedidoEditando.id, cliente.trim(), telefono.trim(), fecha, items, valDescuento);
       toast.success("Pedido actualizado");
     } else {
-      agregarPedido(cliente.trim(), telefono.trim(), fecha, items);
+      agregarPedido(cliente.trim(), telefono.trim(), fecha, items, valDescuento);
       toast.success("Pedido registrado");
     }
     setAbierto(false);
@@ -181,12 +189,14 @@ function PedidosPage() {
     const lineasTexto = p.items
       .map((i) => `• ${i.cantidad} x ${i.nombre} — ${money(i.precio * i.cantidad)}`)
       .join("\n");
-    return `Hola ${p.cliente}, tu pedido de Dulces del Rey Pirata está listo:\n\n${lineasTexto}\n\nTotal a pagar: ${money(totalPedido(p))}\nFecha del pedido: ${p.fecha}`;
+    const descTexto = p.descuento && p.descuento > 0 ? `\nDescuento aplicado: ${p.descuento}%` : "";
+    return `Hola ${p.cliente}, tu pedido de Dulces del Rey Pirata está listo:\n\n${lineasTexto}${descTexto}\n\nTotal a pagar: ${money(totalPedido(p))}\nFecha del pedido: ${p.fecha}`;
   };
 
   const mensajeInstagram = (p: Pedido) => {
     const lineasTexto = p.items.map((i) => `• ${i.cantidad} x ${i.nombre}`).join("\n");
-    return `🍪 Pedido — Dulces del Rey Pirata\n\nCliente: ${p.cliente}\nFecha: ${p.fecha}\n\nProductos:\n${lineasTexto}\n\n💰 Total: ${money(totalPedido(p))}\n\n¡Gracias por tu preferencia! ✨`;
+    const descTexto = p.descuento && p.descuento > 0 ? `\nDescuento aplicado: ${p.descuento}%` : "";
+    return `🍪 Pedido — Dulces del Rey Pirata\n\nCliente: ${p.cliente}\nFecha: ${p.fecha}\n\nProductos:\n${lineasTexto}${descTexto}\n\n💰 Total: ${money(totalPedido(p))}\n\n¡Gracias por tu preferencia! ✨`;
   };
 
   const abrirWhatsApp = (p: Pedido) => {
@@ -272,7 +282,12 @@ function PedidosPage() {
                             <p className="text-xs text-muted-foreground">{p.fecha}</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <p className="shrink-0 font-semibold">{money(totalPedido(p))}</p>
+                            <div className="text-right">
+                              <p className="shrink-0 font-semibold">{money(totalPedido(p))}</p>
+                              {p.descuento && p.descuento > 0 ? (
+                                <span className="text-[10px] text-primary font-medium">({p.descuento}% desc.)</span>
+                              ) : null}
+                            </div>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -365,6 +380,9 @@ function PedidosPage() {
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="font-semibold">{money(totalPedido(p))}</p>
+                          {p.descuento && p.descuento > 0 ? (
+                            <span className="text-[10px] text-primary font-medium block">({p.descuento}% desc.)</span>
+                          ) : null}
                           <Badge variant="secondary" className="mt-1">
                             Entregado
                           </Badge>
@@ -434,14 +452,28 @@ function PedidosPage() {
                   Se usa para generar el enlace de WhatsApp.
                 </p>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="fecha">Fecha del pedido</Label>
-                <Input
-                  id="fecha"
-                  type="date"
-                  value={fecha}
-                  onChange={(e) => setFecha(e.target.value)}
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="fecha">Fecha del pedido</Label>
+                  <Input
+                    id="fecha"
+                    type="date"
+                    value={fecha}
+                    onChange={(e) => setFecha(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="descuento">Descuento (%)</Label>
+                  <Input
+                    id="descuento"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={descuento}
+                    onChange={(e) => setDescuento(e.target.value)}
+                    placeholder="Ej: 50"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -516,8 +548,21 @@ function PedidosPage() {
                 </Button>
               </div>
 
-              <div className="rounded-xl bg-secondary/70 px-3 py-2 text-sm">
-                Total del pedido: <span className="font-semibold">{money(totalBorrador)}</span>
+              <div className="rounded-xl bg-secondary/70 px-3 py-2 text-sm space-y-1">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Subtotal:</span>
+                  <span>{money(subtotalBorrador)}</span>
+                </div>
+                {descuentoNum > 0 ? (
+                  <div className="flex justify-between text-xs text-primary font-medium">
+                    <span>Descuento ({descuentoNum}%):</span>
+                    <span>-{money((subtotalBorrador * descuentoNum) / 100)}</span>
+                  </div>
+                ) : null}
+                <div className="flex justify-between font-semibold pt-1 border-t border-border/50">
+                  <span>Total del pedido:</span>
+                  <span>{money(totalBorrador)}</span>
+                </div>
               </div>
 
               {hayFaltaStock ? (
