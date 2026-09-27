@@ -60,6 +60,7 @@ export type VentaMillaray = {
   metodoPago: "efectivo" | "transferencia";
   pagado: boolean;
   fecha: string;
+  descuento?: number; // Descuento opcional en ventas de Millaray
 };
 
 export type Cierre = {
@@ -148,7 +149,8 @@ const isVentaMillaray = (v: unknown): v is VentaMillaray => {
     typeof x.precio === "number" &&
     (x.metodoPago === "efectivo" || x.metodoPago === "transferencia") &&
     typeof x.pagado === "boolean" &&
-    typeof x.fecha === "string"
+    typeof x.fecha === "string" &&
+    (x.descuento === undefined || typeof x.descuento === "number")
   );
 };
 
@@ -230,6 +232,7 @@ type Store = {
     productoId: string,
     cantidad: number,
     metodoPago: "efectivo" | "transferencia",
+    descuento?: number,
   ) => void;
   marcarVentaMillarayPagada: (id: string) => void;
   eliminarVentaMillaray: (id: string) => void;
@@ -547,6 +550,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       productoId: string,
       cantidad: number,
       metodoPago: "efectivo" | "transferencia",
+      descuento?: number,
     ) => {
       setData((d) => {
         const producto = d.productos.find((p) => p.id === productoId);
@@ -567,6 +571,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               costo: producto.costo,
             },
           ],
+          descuento,
         };
         const venta: VentaMillaray = {
           id: uid(),
@@ -578,6 +583,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           metodoPago,
           pagado: false,
           fecha,
+          descuento,
         };
         return {
           ...d,
@@ -601,13 +607,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  // Corrige la devolución de stock al eliminar una venta de Millaray
   const eliminarVentaMillaray = useCallback((id: string) => {
     setData((d) => {
       const venta = d.ventasMillaray.find((v) => v.id === id);
       if (!venta) return { ...d, ventasMillaray: d.ventasMillaray.filter((v) => v.id !== id) };
 
-      // Devolver stock al punto de venta de Millaray
       const productos = d.productos.map((p) =>
         p.id === venta.productoId
           ? { ...p, millaray: (p.millaray ?? 0) + venta.cantidad }

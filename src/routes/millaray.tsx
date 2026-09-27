@@ -95,6 +95,7 @@ function MillarayPage() {
   const [cliente, setCliente] = useState("");
   const [productoId, setProductoId] = useState("");
   const [cantidadVenta, setCantidadVenta] = useState("");
+  const [descuentoVenta, setDescuentoVenta] = useState("");
   const [metodoPago, setMetodoPago] = useState<"efectivo" | "transferencia">("efectivo");
   const [errorVenta, setErrorVenta] = useState("");
 
@@ -108,7 +109,11 @@ function MillarayPage() {
     () =>
       ventasMillaray
         .filter((v) => !v.pagado)
-        .reduce((s, v) => s + v.precio * v.cantidad, 0),
+        .reduce((s, v) => {
+          const sub = v.precio * v.cantidad;
+          const desc = v.descuento && v.descuento > 0 ? (sub * v.descuento) / 100 : 0;
+          return s + Math.max(0, sub - desc);
+        }, 0),
     [ventasMillaray],
   );
 
@@ -160,12 +165,17 @@ function MillarayPage() {
     setCliente("");
     setProductoId(conStock[0]?.id ?? "");
     setCantidadVenta("");
+    setDescuentoVenta("");
     setMetodoPago("efectivo");
     setErrorVenta("");
     setVentaAbierta(true);
   };
 
   const productoVenta = productos.find((p) => p.id === productoId);
+
+  const subtotalVentaCalc = productoVenta && Number(cantidadVenta) > 0 ? Number(cantidadVenta) * productoVenta.precio : 0;
+  const descVentaNum = Number(descuentoVenta) || 0;
+  const totalVentaCalc = Math.max(0, subtotalVentaCalc - (subtotalVentaCalc * descVentaNum) / 100);
 
   const confirmarVenta = () => {
     const n = Number(cantidadVenta);
@@ -185,9 +195,11 @@ function MillarayPage() {
       setErrorVenta(`Solo hay ${productoVenta.millaray ?? 0} u. de ${productoVenta.nombre} en su stock`);
       return;
     }
-    registrarVentaMillaray(cliente.trim(), productoVenta.id, n, metodoPago);
+
+    const valDesc = descuentoVenta.trim() === "" ? undefined : Number(descuentoVenta);
+    registrarVentaMillaray(cliente.trim(), productoVenta.id, n, metodoPago, valDesc);
     toast.success(
-      `Venta registrada: ${n} u. de ${productoVenta.nombre} · ${money(n * productoVenta.precio)}`,
+      `Venta registrada: ${n} u. de ${productoVenta.nombre} · ${money(totalVentaCalc)}`,
       { description: "Te amo Millaray ❤" },
     );
     setVentaAbierta(false);
@@ -267,53 +279,63 @@ function MillarayPage() {
                 </CardContent>
               </Card>
             ) : (
-              ventasPendientes.map((v) => (
-                <Card key={v.id}>
-                  <CardContent className="flex items-center gap-3 p-3">
-                    <Checkbox
-                      id={`pagado-${v.id}`}
-                      checked={v.pagado}
-                      onCheckedChange={() => {
-                        marcarVentaMillarayPagada(v.id);
-                        toast.success("Venta marcada como pagada");
-                      }}
-                      aria-label="Marcar como pagado"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{v.cliente}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {v.cantidad} u. · {v.nombre}
-                      </p>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <Badge variant={v.metodoPago === "efectivo" ? "secondary" : "outline"}>
-                          {v.metodoPago === "efectivo" ? (
-                            <Banknote className="h-3 w-3" />
-                          ) : (
-                            <CreditCard className="h-3 w-3" />
-                          )}
-                          {v.metodoPago === "efectivo" ? "Efectivo" : "Transferencia"}
-                        </Badge>
-                        <Badge variant="secondary">Pendiente de pago</Badge>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <p className="text-sm font-semibold">{money(v.precio * v.cantidad)}</p>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground"
-                        onClick={() => {
-                          eliminarVentaMillaray(v.id);
-                          toast.success("Registro de venta eliminado");
+              ventasPendientes.map((v) => {
+                const subV = v.precio * v.cantidad;
+                const descV = v.descuento && v.descuento > 0 ? (subV * v.descuento) / 100 : 0;
+                const totalV = Math.max(0, subV - descV);
+                return (
+                  <Card key={v.id}>
+                    <CardContent className="flex items-center gap-3 p-3">
+                      <Checkbox
+                        id={`pagado-${v.id}`}
+                        checked={v.pagado}
+                        onCheckedChange={() => {
+                          marcarVentaMillarayPagada(v.id);
+                          toast.success("Venta marcada como pagada");
                         }}
-                        aria-label="Eliminar registro de venta"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                        aria-label="Marcar como pagado"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{v.cliente}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {v.cantidad} u. · {v.nombre}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <Badge variant={v.metodoPago === "efectivo" ? "secondary" : "outline"}>
+                            {v.metodoPago === "efectivo" ? (
+                              <Banknote className="h-3 w-3" />
+                            ) : (
+                              <CreditCard className="h-3 w-3" />
+                            )}
+                            {v.metodoPago === "efectivo" ? "Efectivo" : "Transferencia"}
+                          </Badge>
+                          <Badge variant="secondary">Pendiente de pago</Badge>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <div className="text-right">
+                          <p className="text-sm font-semibold">{money(totalV)}</p>
+                          {v.descuento && v.descuento > 0 ? (
+                            <span className="text-[10px] text-primary font-medium">({v.descuento}% desc.)</span>
+                          ) : null}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground"
+                          onClick={() => {
+                            eliminarVentaMillaray(v.id);
+                            toast.success("Registro de venta eliminado");
+                          }}
+                          aria-label="Eliminar registro de venta"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
             )}
           </div>
         </section>
@@ -518,27 +540,56 @@ function MillarayPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Método de pago</Label>
-                  <Select
-                    value={metodoPago}
-                    onValueChange={(v) => setMetodoPago(v as "efectivo" | "transferencia")}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="efectivo">Efectivo</SelectItem>
-                      <SelectItem value="transferencia">Transferencia</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="venta-descuento">Descuento (%)</Label>
+                  <Input
+                    id="venta-descuento"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={descuentoVenta}
+                    onChange={(e) => {
+                      setDescuentoVenta(e.target.value);
+                      setErrorVenta("");
+                    }}
+                    placeholder="Ej: 50"
+                  />
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Método de pago</Label>
+                <Select
+                  value={metodoPago}
+                  onValueChange={(v) => setMetodoPago(v as "efectivo" | "transferencia")}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="efectivo">Efectivo</SelectItem>
+                    <SelectItem value="transferencia">Transferencia</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {errorVenta ? <p className="text-xs text-destructive">{errorVenta}</p> : null}
               {productoVenta && Number(cantidadVenta) > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Total de la venta: {money(Number(cantidadVenta) * productoVenta.precio)}
-                </p>
+                <div className="rounded-xl bg-secondary/70 px-3 py-2 text-sm space-y-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Subtotal:</span>
+                    <span>{money(subtotalVentaCalc)}</span>
+                  </div>
+                  {descVentaNum > 0 ? (
+                    <div className="flex justify-between text-xs text-primary font-medium">
+                      <span>Descuento ({descVentaNum}%):</span>
+                      <span>-{money((subtotalVentaCalc * descVentaNum) / 100)}</span>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between font-semibold pt-1 border-t border-border/50">
+                    <span>Total a cobrar:</span>
+                    <span>{money(totalVentaCalc)}</span>
+                  </div>
+                </div>
               ) : null}
             </div>
 
