@@ -39,11 +39,11 @@ function DatosPagoPage() {
   };
 
   const copiarTodo = () => {
-    const textoCompleto = `Banco: ${datosBancarios.banco}
-Tipo de Cuenta: ${datosBancarios.tipoCuenta}
-N° de Cuenta: ${datosBancarios.nroCuenta}
+    const textoCompleto = `Nombre: ${datosBancarios.nombre}
 RUT: ${datosBancarios.rut}
-Nombre: ${datosBancarios.nombre}`;
+Banco: ${datosBancarios.banco}
+Tipo de Cuenta: ${datosBancarios.tipoCuenta}
+N° de Cuenta: ${datosBancarios.nroCuenta}`;
 
     navigator.clipboard.writeText(textoCompleto);
     toast.success("¡Todos los datos bancarios fueron copiados!");
@@ -78,58 +78,24 @@ Nombre: ${datosBancarios.nombre}`;
 
           <CardContent className="p-5 space-y-4">
             
-            {/* Banco */}
+            {/* 1. Nombre / Titular */}
             <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50 border border-border/50">
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Banco</p>
-                <p className="text-sm font-semibold truncate">{datosBancarios.banco}</p>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Nombre / Titular</p>
+                <p className="text-sm font-semibold truncate">{datosBancarios.nombre}</p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 className="shrink-0 gap-1.5 h-8 text-xs"
-                onClick={() => copiarTexto(datosBancarios.banco, "Banco")}
+                onClick={() => copiarTexto(datosBancarios.nombre, "Nombre")}
               >
-                {copiadoCampo === "Banco" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiadoCampo === "Banco" ? "Copiado" : "Copiar"}
+                {copiadoCampo === "Nombre" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiadoCampo === "Nombre" ? "Copiado" : "Copiar"}
               </Button>
             </div>
 
-            {/* Tipo de Cuenta */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50 border border-border/50">
-              <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Tipo de Cuenta</p>
-                <p className="text-sm font-semibold truncate">{datosBancarios.tipoCuenta}</p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5 h-8 text-xs"
-                onClick={() => copiarTexto(datosBancarios.tipoCuenta, "Tipo de cuenta")}
-              >
-                {copiadoCampo === "Tipo de cuenta" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiadoCampo === "Tipo de cuenta" ? "Copiado" : "Copiar"}
-              </Button>
-            </div>
-
-            {/* Número de Cuenta */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50 border border-border/50">
-              <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Número de Cuenta</p>
-                <p className="text-sm font-semibold truncate">{datosBancarios.nroCuenta}</p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5 h-8 text-xs"
-                onClick={() => copiarTexto(datosBancarios.nroCuenta, "N° de cuenta")}
-              >
-                {copiadoCampo === "N° de cuenta" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiadoCampo === "N° de cuenta" ? "Copiado" : "Copiar"}
-              </Button>
-            </div>
-
-            {/* RUT */}
+            {/* 2. RUT */}
             <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50 border border-border/50">
               <div className="min-w-0">
                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground">RUT</p>
@@ -146,20 +112,54 @@ Nombre: ${datosBancarios.nombre}`;
               </Button>
             </div>
 
-            {/* Titular / Nombre */}
+            {/* 3. Banco */}
             <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50 border border-border/50">
               <div className="min-w-0">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Nombre / Titular</p>
-                <p className="text-sm font-semibold truncate">{datosBancarios.nombre}</p>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Banco</p>
+                <p className="text-sm font-semibold truncate">{datosBancarios.banco}</p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 className="shrink-0 gap-1.5 h-8 text-xs"
-                onClick={() => copiarTexto(datosBancarios.nombre, "Nombre")}
+                onClick={() => copiarTexto(datosBancarios.banco, "Banco")}
               >
-                {copiadoCampo === "Nombre" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiadoCampo === "Nombre" ? "Copiado" : "Copiar"}
+                {copiadoCampo === "Banco" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiadoCampo === "Banco" ? "Copiado" : "Copiar"}
+              </Button>
+            </div>
+
+            {/* 4. Tipo de Cuenta */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50 border border-border/50">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Tipo de Cuenta</p>
+                <p className="text-sm font-semibold truncate">{datosBancarios.tipoCuenta}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5 h-8 text-xs"
+                onClick={() => copiarTexto(datosBancarios.tipoCuenta, "Tipo de cuenta")}
+              >
+                {copiadoCampo === "Tipo de cuenta" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiadoCampo === "Tipo de cuenta" ? "Copiado" : "Copiar"}
+              </Button>
+            </div>
+
+            {/* 5. Número de Cuenta */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50 border border-border/50">
+              <div className="min-w-0">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Número de Cuenta</p>
+                <p className="text-sm font-semibold truncate">{datosBancarios.nroCuenta}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5 h-8 text-xs"
+                onClick={() => copiarTexto(datosBancarios.nroCuenta, "N° de cuenta")}
+              >
+                {copiadoCampo === "N° de cuenta" ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiadoCampo === "N° de cuenta" ? "Copiado" : "Copiar"}
               </Button>
             </div>
 
