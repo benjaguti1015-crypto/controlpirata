@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { money, useStore, type Producto } from "@/lib/store";
+import { ResumenMillaray } from "@/components/ResumenMillaray";
 import { AdminGuard } from "@/components/adminguard";
 
 export const Route = createFileRoute("/millaray")({
@@ -259,6 +260,8 @@ function MillarayPage() {
             </CardContent>
           </Card>
         </div>
+
+        <ResumenMillaray />
 
         {/* Ventas pendientes */}
         <section className="mt-7">
