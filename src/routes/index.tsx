@@ -77,9 +77,9 @@ function Dashboard() {
       hoy: dias[dias.length - 1]!,
       ventasSemana: semana.reduce((s, d) => s + d.ventas, 0),
       utilidadSemana: semana.reduce((s, d) => s + d.utilidad, 0),
-      top: ventasPorProducto(cierres, pedidos, dias).slice(0, 5),
+      top: ventasPorProducto(cierres, pedidos, dias, productos).slice(0, 5),
     };
-  }, [pedidos, cierres]);
+  }, [pedidos, cierres, productos]);
 
   const maxUnidades = m.top[0]?.unidades ?? 0;
 

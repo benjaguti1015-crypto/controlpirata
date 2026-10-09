@@ -1,5 +1,5 @@
 import { fechaChile } from "@/lib/fecha";
-import { cuentaComoVenta, type Cierre, type Pedido } from "@/lib/store";
+import { cuentaComoVenta, type Cierre, type Pedido, type Producto } from "@/lib/store";
 
 export type Dia = { fecha: string; ventas: number; utilidad: number };
 
@@ -32,14 +32,18 @@ export function ventasPorDia(cierres: Cierre[], pedidos: Pedido[], n = 30): Dia[
 }
 
 /** Unidades e ingreso (sin descuentos) por producto en el rango de días dado. */
-export function ventasPorProducto(cierres: Cierre[], pedidos: Pedido[], dias: Dia[]) {
+export function ventasPorProducto(cierres: Cierre[], pedidos: Pedido[], dias: Dia[], productos: Producto[]) {
   const rango = new Set(dias.map((d) => d.fecha));
+  // Agrupa por nombre sin mayúsculas ("Botín de Nutella" = "Botín de nutella") y muestra el nombre actual del producto.
+  const clave = (n: string) => n.trim().toLowerCase();
+  const actual = new Map(productos.map((p) => [clave(p.nombre), p.nombre]));
   const mapa = new Map<string, { nombre: string; unidades: number; ingresos: number }>();
   const sumar = (items: { productoId: string; nombre: string; cantidad: number; precio: number }[]) =>
     items.forEach((i) => {
-      const prev = mapa.get(i.productoId) ?? { nombre: i.nombre, unidades: 0, ingresos: 0 };
-      mapa.set(i.productoId, {
-        nombre: i.nombre,
+      const k = clave(i.nombre);
+      const prev = mapa.get(k) ?? { nombre: actual.get(k) ?? i.nombre, unidades: 0, ingresos: 0 };
+      mapa.set(k, {
+        nombre: prev.nombre,
         unidades: prev.unidades + i.cantidad,
         ingresos: prev.ingresos + i.precio * i.cantidad,
       });
