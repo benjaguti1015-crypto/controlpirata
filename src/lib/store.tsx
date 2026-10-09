@@ -218,7 +218,8 @@ type Store = {
     descuento?: number,
   ) => void;
   entregarPedido: (id: string) => void;
-  marcarPedidoPagado: (id: string) => void;
+  marcarPedidoPagado: (id: string, pagado?: boolean) => void;
+  deshacerEntrega: (id: string) => void;
   registrarVentaRapida: (items: ItemPedido[], cliente: string, pagado: boolean) => void;
   eliminarPedido: (id: string) => void;
   cerrarDia: () => Cierre | null;
@@ -417,10 +418,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const marcarPedidoPagado = useCallback((id: string) => {
+  const marcarPedidoPagado = useCallback((id: string, pagado = true) => {
     setData((d) => ({
       ...d,
-      pedidos: d.pedidos.map((p) => (p.id === id ? { ...p, pagado: true } : p)),
+      pedidos: d.pedidos.map((p) => (p.id === id ? { ...p, pagado } : p)),
+    }));
+  }, []);
+
+  const deshacerEntrega = useCallback((id: string) => {
+    setData((d) => ({
+      ...d,
+      pedidos: d.pedidos.map((p) => (p.id === id ? { ...p, estado: "pendiente" as const } : p)),
     }));
   }, []);
 
@@ -731,6 +739,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       actualizarPedido,
       entregarPedido,
       marcarPedidoPagado,
+      deshacerEntrega,
       registrarVentaRapida,
       eliminarPedido,
       cerrarDia,
@@ -758,6 +767,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       actualizarPedido,
       entregarPedido,
       marcarPedidoPagado,
+      deshacerEntrega,
       registrarVentaRapida,
       eliminarPedido,
       cerrarDia,

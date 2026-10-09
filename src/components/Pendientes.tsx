@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { esPendiente, money, totalPedido, useStore } from "@/lib/store";
 
 export function Pendientes() {
-  const { pedidos, entregarPedido, marcarPedidoPagado } = useStore();
+  const { pedidos, entregarPedido, marcarPedidoPagado, deshacerEntrega } = useStore();
   const lista = pedidos.filter(esPendiente);
 
   return (
@@ -37,10 +37,22 @@ export function Pendientes() {
                       className="h-12 flex-1 transition-transform duration-150 ease-out active:scale-[0.97]"
                       onClick={() => {
                         entregarPedido(p.id);
-                        toast.success("Marcado como entregado");
+                        toast.success("Marcado como entregado", {
+                          duration: 8000,
+                          action: { label: "Deshacer", onClick: () => deshacerEntrega(p.id) },
+                        });
                       }}
                     >
                       Entregado
+                    </Button>
+                  )}
+                  {p.estado === "entregado" && (
+                    <Button
+                      variant="ghost"
+                      className="h-12 transition-transform duration-150 ease-out active:scale-[0.97]"
+                      onClick={() => deshacerEntrega(p.id)}
+                    >
+                      No se entregó
                     </Button>
                   )}
                   {p.pagado === false && (
@@ -49,7 +61,10 @@ export function Pendientes() {
                       className="h-12 flex-1 transition-transform duration-150 ease-out active:scale-[0.97]"
                       onClick={() => {
                         marcarPedidoPagado(p.id);
-                        toast.success("Marcado como pagado");
+                        toast.success("Marcado como pagado", {
+                          duration: 8000,
+                          action: { label: "Deshacer", onClick: () => marcarPedidoPagado(p.id, false) },
+                        });
                       }}
                     >
                       Ya pagó
