@@ -261,14 +261,14 @@ function Metric({
   destacado?: boolean;
 }) {
   return (
-    <Card className={destacado ? "border-accent/60 bg-accent/15" : undefined}>
+    <Card className={destacado ? "border-primary bg-primary text-primary-foreground" : undefined}>
       <CardContent className="p-4">
-        <div className="flex items-center gap-2 text-muted-foreground">
+        <div className={`flex items-center gap-2 ${destacado ? "text-primary-foreground/80" : "text-muted-foreground"}`}>
           <Icon className="h-4 w-4 shrink-0" />
-          <span className="truncate text-xs font-medium uppercase tracking-wide">{label}</span>
+          <span className="truncate text-xs font-medium">{label}</span>
         </div>
-        <p className="mt-2 truncate text-xl font-semibold">{value}</p>
-        {hint ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p> : null}
+        <p className="mt-2 truncate text-2xl font-semibold tabular-nums">{value}</p>
+        {hint ? <p className={`mt-0.5 truncate text-xs ${destacado ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{hint}</p> : null}
       </CardContent>
     </Card>
   );
