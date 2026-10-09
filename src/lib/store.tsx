@@ -49,6 +49,8 @@ export type Pedido = {
   items: ItemPedido[];
   estado: "pendiente" | "entregado";
   descuento?: number | undefined; // Porcentaje de descuento opcional (ej: 50 para 50%)
+  pagado?: boolean | undefined; // undefined = pedido antiguo, se considera pagado
+  canal?: "presencial" | undefined;
 };
 
 export type VentaMillaray = {
@@ -216,6 +218,8 @@ type Store = {
     descuento?: number,
   ) => void;
   entregarPedido: (id: string) => void;
+  marcarPedidoPagado: (id: string) => void;
+  registrarVentaRapida: (items: ItemPedido[], cliente: string, pagado: boolean) => void;
   eliminarPedido: (id: string) => void;
   cerrarDia: () => Cierre | null;
   actualizarCierre: (id: string, c: Omit<Cierre, "id">) => void;
@@ -412,6 +416,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
     });
   }, []);
+
+  const marcarPedidoPagado = useCallback((id: string) => {
+    setData((d) => ({
+      ...d,
+      pedidos: d.pedidos.map((p) => (p.id === id ? { ...p, pagado: true } : p)),
+    }));
+  }, []);
+
+  const registrarVentaRapida = useCallback(
+    (items: ItemPedido[], cliente: string, pagado: boolean) => {
+      setData((d) => ({
+        ...d,
+        productos: d.productos.map((prod) => {
+          const item = items.find((i) => i.productoId === prod.id);
+          return item ? { ...prod, stock: prod.stock - item.cantidad } : prod;
+        }),
+        pedidos: [
+          {
+            id: uid(),
+            cliente: cliente.trim() || "Venta presencial",
+            telefono: undefined,
+            fecha: fechaChile(),
+            items,
+            estado: "entregado" as const,
+            pagado,
+            canal: "presencial" as const,
+          },
+          ...d.pedidos,
+        ],
+      }));
+    },
+    [],
+  );
 
   const eliminarPedido = useCallback((id: string) => {
     setData((d) => {
@@ -630,7 +667,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const cerrarDia = useCallback(() => {
     let cierre: Cierre | null = null;
     setData((d) => {
-      const entregados = d.pedidos.filter((p) => p.estado === "entregado");
+      const entregados = d.pedidos.filter(cuentaComoVenta);
       if (entregados.length === 0) return d;
       const ingresos = entregados.reduce((s, p) => s + totalPedido(p), 0);
       const costos = entregados.reduce((s, p) => s + costoPedido(p), 0);
@@ -661,7 +698,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       };
       return {
         ...d,
-        pedidos: d.pedidos.filter((p) => p.estado !== "entregado"),
+        pedidos: d.pedidos.filter((p) => !cuentaComoVenta(p)),
         cierres: [...d.cierres, cierre],
       };
     });
@@ -693,6 +730,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       agregarPedido,
       actualizarPedido,
       entregarPedido,
+      marcarPedidoPagado,
+      registrarVentaRapida,
       eliminarPedido,
       cerrarDia,
       actualizarCierre,
@@ -718,6 +757,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       agregarPedido,
       actualizarPedido,
       entregarPedido,
+      marcarPedidoPagado,
+      registrarVentaRapida,
       eliminarPedido,
       cerrarDia,
       actualizarCierre,
@@ -748,6 +789,12 @@ export function useStore() {
 export const money = (n: number) =>
   new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 })
     .format(Number.isFinite(n) ? n : 0);
+
+/** Venta real: entregada y no marcada como impaga (pagado undefined = pedido antiguo, cuenta). */
+export const cuentaComoVenta = (p: Pedido) => p.estado === "entregado" && p.pagado !== false;
+
+/** Falta entregar o cobrar. */
+export const esPendiente = (p: Pedido) => p.estado === "pendiente" || p.pagado === false;
 
 export const totalPedido = (p: Pedido) => {
   const subtotal = p.items.reduce((s, i) => s + i.precio * i.cantidad, 0);

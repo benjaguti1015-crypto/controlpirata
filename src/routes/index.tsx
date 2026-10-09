@@ -29,7 +29,9 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { HistorialCierres } from "@/components/HistorialCierres";
-import { useStore, money, totalPedido, costoPedido } from "@/lib/store";
+import { useStore, money, totalPedido, costoPedido, cuentaComoVenta, esPendiente } from "@/lib/store";
+import { VentaRapida } from "@/components/VentaRapida";
+import { Pendientes } from "@/components/Pendientes";
 import { toast } from "sonner";
 import { AdminGuard } from "@/components/adminguard";
 
@@ -56,10 +58,10 @@ function Dashboard() {
   const { productos, pedidos, cierres, hidratado, cerrarDia } = useStore();
 
   const m = useMemo(() => {
-    const entregados = pedidos.filter((p) => p.estado === "entregado");
+    const entregados = pedidos.filter(cuentaComoVenta);
     const ingresos = entregados.reduce((s, p) => s + totalPedido(p), 0);
     const costos = entregados.reduce((s, p) => s + costoPedido(p), 0);
-    const pendientes = pedidos.filter((p) => p.estado === "pendiente");
+    const pendientes = pedidos.filter(esPendiente);
 
     const ranking = new Map<string, { nombre: string; unidades: number; ingresos: number }>();
     entregados.forEach((p) =>
@@ -140,6 +142,11 @@ function Dashboard() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <VentaRapida />
+          <Pendientes />
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
