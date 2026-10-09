@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
-export const Route = createFileRoute("/datos-pago")({
+export const Route = createFileRoute("/transferencia")({
   head: () => ({
     meta: [
       { title: "Datos para Transferencia | Dulces del Rey Pirata" },

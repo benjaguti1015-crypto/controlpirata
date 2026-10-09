@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { fechaChile } from "@/lib/fecha";
 import { CalendarRange, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -51,7 +52,7 @@ const fechaLarga = (iso: string) =>
 
 const fechaInput = (iso: string) => {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : d.toISOString().slice(0, 10);
+  return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : fechaChile(d);
 };
 
 type LineaDetalle = {

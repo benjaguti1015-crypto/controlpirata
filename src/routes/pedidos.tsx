@@ -36,6 +36,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { fechaChile } from "@/lib/fecha";
 import { useStore, money, totalPedido, type ItemPedido, type Pedido } from "@/lib/store";
 import { AdminGuard } from "@/components/adminguard";
 
@@ -79,7 +80,7 @@ function PedidosPage() {
   const [pedidoEditando, setPedidoEditando] = useState<Pedido | null>(null);
   const [cliente, setCliente] = useState("");
   const [telefono, setTelefono] = useState("");
-  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  const [fecha, setFecha] = useState(() => fechaChile());
   const [descuento, setDescuento] = useState("");
   const [lineas, setLineas] = useState<Borrador[]>([{ productoId: "", cantidad: "1" }]);
   const [errores, setErrores] = useState<string[]>([]);
@@ -111,7 +112,7 @@ function PedidosPage() {
     setPedidoEditando(null);
     setCliente("");
     setTelefono("");
-    setFecha(new Date().toISOString().slice(0, 10));
+    setFecha(fechaChile());
     setDescuento("");
     setLineas([{ productoId: "", cantidad: "1" }]);
     setErrores([]);

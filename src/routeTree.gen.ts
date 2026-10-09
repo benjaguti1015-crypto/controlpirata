@@ -13,7 +13,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as InsumosRouteImport } from './routes/insumos'
 import { Route as MillarayRouteImport } from './routes/millaray'
 import { Route as PedidosRouteImport } from './routes/pedidos'
+import { Route as Pedidos_onlineRouteImport } from './routes/pedidos_online'
 import { Route as ProductosRouteImport } from './routes/productos'
+import { Route as TransferenciaRouteImport } from './routes/transferencia'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -35,9 +37,19 @@ const PedidosRoute = PedidosRouteImport.update({
   path: '/pedidos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Pedidos_onlineRoute = Pedidos_onlineRouteImport.update({
+  id: '/pedidos_online',
+  path: '/pedidos_online',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductosRoute = ProductosRouteImport.update({
   id: '/productos',
   path: '/productos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransferenciaRoute = TransferenciaRouteImport.update({
+  id: '/transferencia',
+  path: '/transferencia',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -46,14 +58,18 @@ export interface FileRoutesByFullPath {
   '/insumos': typeof InsumosRoute
   '/millaray': typeof MillarayRoute
   '/pedidos': typeof PedidosRoute
+  '/pedidos_online': typeof Pedidos_onlineRoute
   '/productos': typeof ProductosRoute
+  '/transferencia': typeof TransferenciaRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/insumos': typeof InsumosRoute
   '/millaray': typeof MillarayRoute
   '/pedidos': typeof PedidosRoute
+  '/pedidos_online': typeof Pedidos_onlineRoute
   '/productos': typeof ProductosRoute
+  '/transferencia': typeof TransferenciaRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,14 +77,38 @@ export interface FileRoutesById {
   '/insumos': typeof InsumosRoute
   '/millaray': typeof MillarayRoute
   '/pedidos': typeof PedidosRoute
+  '/pedidos_online': typeof Pedidos_onlineRoute
   '/productos': typeof ProductosRoute
+  '/transferencia': typeof TransferenciaRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/insumos' | '/millaray' | '/pedidos' | '/productos'
+  fullPaths:
+    | '/'
+    | '/insumos'
+    | '/millaray'
+    | '/pedidos'
+    | '/pedidos_online'
+    | '/productos'
+    | '/transferencia'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/insumos' | '/millaray' | '/pedidos' | '/productos'
-  id: '__root__' | '/' | '/insumos' | '/millaray' | '/pedidos' | '/productos'
+  to:
+    | '/'
+    | '/insumos'
+    | '/millaray'
+    | '/pedidos'
+    | '/pedidos_online'
+    | '/productos'
+    | '/transferencia'
+  id:
+    | '__root__'
+    | '/'
+    | '/insumos'
+    | '/millaray'
+    | '/pedidos'
+    | '/pedidos_online'
+    | '/productos'
+    | '/transferencia'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,7 +116,9 @@ export interface RootRouteChildren {
   InsumosRoute: typeof InsumosRoute
   MillarayRoute: typeof MillarayRoute
   PedidosRoute: typeof PedidosRoute
+  Pedidos_onlineRoute: typeof Pedidos_onlineRoute
   ProductosRoute: typeof ProductosRoute
+  TransferenciaRoute: typeof TransferenciaRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -109,11 +151,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PedidosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pedidos_online': {
+      id: '/pedidos_online'
+      path: '/pedidos_online'
+      fullPath: '/pedidos_online'
+      preLoaderRoute: typeof Pedidos_onlineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/productos': {
       id: '/productos'
       path: '/productos'
       fullPath: '/productos'
       preLoaderRoute: typeof ProductosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transferencia': {
+      id: '/transferencia'
+      path: '/transferencia'
+      fullPath: '/transferencia'
+      preLoaderRoute: typeof TransferenciaRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -124,7 +180,9 @@ const rootRouteChildren: RootRouteChildren = {
   InsumosRoute: InsumosRoute,
   MillarayRoute: MillarayRoute,
   PedidosRoute: PedidosRoute,
+  Pedidos_onlineRoute: Pedidos_onlineRoute,
   ProductosRoute: ProductosRoute,
+  TransferenciaRoute: TransferenciaRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

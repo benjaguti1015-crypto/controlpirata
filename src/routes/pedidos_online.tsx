@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { fechaChile } from "@/lib/fecha";
 import { money, useStore, type ItemPedido } from "@/lib/store";
 
-export const Route = createFileRoute("/pedidos-online")({
+export const Route = createFileRoute("/pedidos_online")({
   head: () => ({
     meta: [
       { title: "Haz tu pedido | Dulces del Rey Pirata" },
@@ -28,7 +29,7 @@ function PedidosOnlinePage() {
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
   const [telefono, setTelefono] = useState("");
-  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  const [fecha, setFecha] = useState(() => fechaChile());
 
   // Cantidades seleccionadas por cada producto (productoId -> cantidad)
   const [cantidades, setCantidades] = useState<Record<string, number>>({});

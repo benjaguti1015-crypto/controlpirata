@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fechaChile } from "@/lib/fecha";
 
 export type Producto = {
   id: string;
@@ -47,7 +48,7 @@ export type Pedido = {
   fecha: string;
   items: ItemPedido[];
   estado: "pendiente" | "entregado";
-  descuento?: number; // Porcentaje de descuento opcional (ej: 50 para 50%)
+  descuento?: number | undefined; // Porcentaje de descuento opcional (ej: 50 para 50%)
 };
 
 export type VentaMillaray = {
@@ -60,7 +61,7 @@ export type VentaMillaray = {
   metodoPago: "efectivo" | "transferencia";
   pagado: boolean;
   fecha: string;
-  descuento?: number; // Descuento opcional en ventas de Millaray
+  descuento?: number | undefined; // Descuento opcional en ventas de Millaray
 };
 
 export type Cierre = {
@@ -522,7 +523,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         id: uid(),
         cliente: "Millaray · punto de venta",
         telefono: undefined,
-        fecha: new Date().toISOString().slice(0, 10),
+        fecha: fechaChile(),
         estado: "entregado",
         items: [
           {
@@ -560,7 +561,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           id: uid(),
           cliente: `Millaray · ${cliente}`,
           telefono: undefined,
-          fecha: fecha.slice(0, 10),
+          fecha: fechaChile(fecha),
           estado: "entregado",
           items: [
             {
