@@ -93,8 +93,7 @@ function MillarayPage() {
   // Formulario de venta
   const [ventaAbierta, setVentaAbierta] = useState(false);
   const [cliente, setCliente] = useState("");
-  const [productoId, setProductoId] = useState("");
-  const [cantidadVenta, setCantidadVenta] = useState("");
+  const [cantidadesVenta, setCantidadesVenta] = useState<Record<string, number>>({});
   const [descuentoVenta, setDescuentoVenta] = useState("");
   const [metodoPago, setMetodoPago] = useState<"efectivo" | "transferencia">("efectivo");
   const [errorVenta, setErrorVenta] = useState("");
@@ -163,43 +162,42 @@ function MillarayPage() {
 
   const abrirVenta = () => {
     setCliente("");
-    setProductoId(conStock[0]?.id ?? "");
-    setCantidadVenta("");
+    setCantidadesVenta({});
     setDescuentoVenta("");
     setMetodoPago("efectivo");
     setErrorVenta("");
     setVentaAbierta(true);
   };
 
-  const productoVenta = productos.find((p) => p.id === productoId);
-
-  const subtotalVentaCalc = productoVenta && Number(cantidadVenta) > 0 ? Number(cantidadVenta) * productoVenta.precio : 0;
+  const lineasVenta = conStock
+    .filter((p) => (cantidadesVenta[p.id] ?? 0) > 0)
+    .map((p) => ({ producto: p, cantidad: cantidadesVenta[p.id]! }));
+  const subtotalVentaCalc = lineasVenta.reduce((s, l) => s + l.cantidad * l.producto.precio, 0);
   const descVentaNum = Number(descuentoVenta) || 0;
   const totalVentaCalc = Math.max(0, subtotalVentaCalc - (subtotalVentaCalc * descVentaNum) / 100);
 
+  const cambiarVenta = (p: Producto, delta: number) =>
+    setCantidadesVenta((c) => ({
+      ...c,
+      [p.id]: Math.max(0, Math.min(p.millaray ?? 0, (c[p.id] ?? 0) + delta)),
+    }));
+
   const confirmarVenta = () => {
-    const n = Number(cantidadVenta);
     if (!cliente.trim()) {
       setErrorVenta("Ingresa el nombre del cliente");
       return;
     }
-    if (!productoVenta) {
-      setErrorVenta("Selecciona una galleta");
-      return;
-    }
-    if (cantidadVenta === "" || !Number.isInteger(n) || n <= 0) {
-      setErrorVenta("Ingresa una cantidad entera mayor que 0");
-      return;
-    }
-    if (n > (productoVenta.millaray ?? 0)) {
-      setErrorVenta(`Solo hay ${productoVenta.millaray ?? 0} u. de ${productoVenta.nombre} en su stock`);
+    if (lineasVenta.length === 0) {
+      setErrorVenta("Agrega al menos una galleta");
       return;
     }
 
     const valDesc = descuentoVenta.trim() === "" ? undefined : Number(descuentoVenta);
-    registrarVentaMillaray(cliente.trim(), productoVenta.id, n, metodoPago, valDesc);
+    lineasVenta.forEach((l) =>
+      registrarVentaMillaray(cliente.trim(), l.producto.id, l.cantidad, metodoPago, valDesc),
+    );
     toast.success(
-      `Venta registrada: ${n} u. de ${productoVenta.nombre} · ${money(totalVentaCalc)}`,
+      `Venta registrada: ${lineasVenta.reduce((s, l) => s + l.cantidad, 0)} u. · ${money(totalVentaCalc)}`,
       { description: "Te amo Millaray ❤" },
     );
     setVentaAbierta(false);
@@ -479,7 +477,7 @@ function MillarayPage() {
 
         {/* Diálogo registrar venta */}
         <Dialog open={ventaAbierta} onOpenChange={setVentaAbierta}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-h-[90dvh] max-w-sm overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Registrar venta de Millaray</DialogTitle>
               <DialogDescription>
@@ -502,43 +500,48 @@ function MillarayPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Galleta</Label>
-                <Select
-                  value={productoId}
-                  onValueChange={(v) => {
-                    setProductoId(v);
-                    setErrorVenta("");
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona una galleta" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {conStock.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.nombre} · {p.millaray ?? 0} u. · {money(p.precio)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Galletas</Label>
+                <ul className="space-y-1.5">
+                  {conStock.map((p) => {
+                    const n = cantidadesVenta[p.id] ?? 0;
+                    return (
+                      <li key={p.id} className="flex items-center gap-2 rounded-xl border p-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{p.nombre}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {p.millaray ?? 0} u. · {money(p.precio)}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-10 w-10"
+                          disabled={n === 0}
+                          onClick={() => cambiarVenta(p, -1)}
+                          aria-label={`Quitar ${p.nombre}`}
+                        >
+                          −
+                        </Button>
+                        <span className="w-6 text-center font-semibold tabular-nums">{n}</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-10 w-10"
+                          disabled={n >= (p.millaray ?? 0)}
+                          onClick={() => cambiarVenta(p, 1)}
+                          aria-label={`Agregar ${p.nombre}`}
+                        >
+                          +
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="venta-cantidad">Cantidad</Label>
-                  <Input
-                    id="venta-cantidad"
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={cantidadVenta}
-                    onChange={(e) => {
-                      setCantidadVenta(e.target.value);
-                      setErrorVenta("");
-                    }}
-                    placeholder="Ej: 3"
-                  />
-                </div>
+              <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="venta-descuento">Descuento (%)</Label>
                   <Input
@@ -573,7 +576,7 @@ function MillarayPage() {
               </div>
 
               {errorVenta ? <p className="text-xs text-destructive">{errorVenta}</p> : null}
-              {productoVenta && Number(cantidadVenta) > 0 ? (
+              {lineasVenta.length > 0 ? (
                 <div className="rounded-xl bg-secondary/70 px-3 py-2 text-sm space-y-1">
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>Subtotal:</span>
