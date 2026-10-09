@@ -664,9 +664,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           : p
       );
 
+      // El pedido que creó esta venta no tiene enlace guardado: se busca el que coincide
+      // (shortcut: si hay pedidos idénticos se quita solo el primero; ya archivados en un cierre no se tocan).
+      const i = d.pedidos.findIndex(
+        (p) =>
+          p.cliente === `Millaray · ${venta.cliente}` &&
+          p.items.length === 1 &&
+          p.items[0]!.productoId === venta.productoId &&
+          p.items[0]!.cantidad === venta.cantidad &&
+          p.descuento === venta.descuento &&
+          (p.fecha === fechaChile(venta.fecha) || p.fecha === venta.fecha.slice(0, 10)),
+      );
+
       return {
         ...d,
         productos,
+        pedidos: i < 0 ? d.pedidos : d.pedidos.filter((_, j) => j !== i),
         ventasMillaray: d.ventasMillaray.filter((v) => v.id !== id),
       };
     });
