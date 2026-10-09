@@ -7,7 +7,6 @@ import {
   Coins,
   Cookie,
   Plus,
-  Receipt,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -30,6 +29,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { HistorialCierres } from "@/components/HistorialCierres";
 import { useStore, money, totalPedido, costoPedido, cuentaComoVenta, esPendiente } from "@/lib/store";
+import { ventasPorDia, ventasPorProducto } from "@/lib/metricas";
+import { VentasDiarias } from "@/components/VentasDiarias";
 import { VentaRapida } from "@/components/VentaRapida";
 import { Pendientes } from "@/components/Pendientes";
 import { toast } from "sonner";
@@ -63,17 +64,8 @@ function Dashboard() {
     const costos = entregados.reduce((s, p) => s + costoPedido(p), 0);
     const pendientes = pedidos.filter(esPendiente);
 
-    const ranking = new Map<string, { nombre: string; unidades: number; ingresos: number }>();
-    entregados.forEach((p) =>
-      p.items.forEach((i) => {
-        const prev = ranking.get(i.productoId) ?? { nombre: i.nombre, unidades: 0, ingresos: 0 };
-        ranking.set(i.productoId, {
-          nombre: i.nombre,
-          unidades: prev.unidades + i.cantidad,
-          ingresos: prev.ingresos + i.precio * i.cantidad,
-        });
-      }),
-    );
+    const dias = ventasPorDia(cierres, pedidos);
+    const semana = dias.slice(-7);
 
     return {
       ingresos,
@@ -81,12 +73,15 @@ function Dashboard() {
       utilidad: ingresos - costos,
       pendientes,
       valorPendiente: pendientes.reduce((s, p) => s + totalPedido(p), 0),
-      top: [...ranking.values()].sort((a, b) => b.unidades - a.unidades).slice(0, 5),
+      dias,
+      hoy: dias[dias.length - 1]!,
+      ventasSemana: semana.reduce((s, d) => s + d.ventas, 0),
+      utilidadSemana: semana.reduce((s, d) => s + d.utilidad, 0),
+      top: ventasPorProducto(cierres, pedidos, dias).slice(0, 5),
     };
-  }, [pedidos]);
+  }, [pedidos, cierres]);
 
   const maxUnidades = m.top[0]?.unidades ?? 0;
-  const margenPct = m.ingresos > 0 ? (m.utilidad / m.ingresos) * 100 : 0;
 
   if (!hidratado) {
     return (
@@ -144,27 +139,25 @@ function Dashboard() {
           </AlertDialog>
         </div>
 
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Metric icon={Coins} label="Ventas de hoy" value={money(m.hoy.ventas)} destacado />
+          <Metric icon={CalendarCheck} label="Ventas 7 días" value={money(m.ventasSemana)} />
+          <Metric icon={Wallet} label="Utilidad 7 días" value={money(m.utilidadSemana)} />
+          <Metric
+            icon={Clock}
+            label="Pendientes"
+            value={String(m.pendientes.length)}
+            hint={`${money(m.valorPendiente)} por entregar o cobrar`}
+          />
+        </div>
+
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           <VentaRapida />
           <Pendientes />
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Metric icon={Coins} label="Ingresos totales" value={money(m.ingresos)} />
-          <Metric icon={Receipt} label="Costos totales" value={money(m.costos)} />
-          <Metric
-            icon={Wallet}
-            label="Utilidad neta"
-            value={money(m.utilidad)}
-            hint={`${margenPct.toFixed(0)}% de margen`}
-            destacado
-          />
-          <Metric
-            icon={Clock}
-            label="Pedidos pendientes"
-            value={String(m.pendientes.length)}
-            hint={`${money(m.valorPendiente)} por cobrar`}
-          />
+        <div className="mt-5">
+          <VentasDiarias dias={m.dias} />
         </div>
 
         {productos.length === 0 ? (
@@ -187,12 +180,11 @@ function Dashboard() {
             <Card>
               <CardContent className="p-5">
                 <h2 className="flex items-center gap-2 text-base font-semibold">
-                  <TrendingUp className="h-4 w-4 text-primary" /> Más vendidas
+                  <TrendingUp className="h-4 w-4 text-primary" /> Más vendidas (30 días)
                 </h2>
                 {m.top.length === 0 ? (
                   <p className="mt-4 text-sm text-muted-foreground">
-                    Aún no hay pedidos entregados. Marca un pedido como entregado para ver el
-                    ranking.
+                    Aún no hay ventas en los últimos 30 días.
                   </p>
                 ) : (
                   <ul className="mt-4 space-y-4">
