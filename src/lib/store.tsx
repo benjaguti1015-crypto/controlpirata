@@ -87,6 +87,9 @@ type Data = {
 
 const KEY = "dulces-rey-pirata-v1";
 const STATE_ID = "main";
+// Cuenta única del panel: la contraseña compartida se crea en Lovable Cloud -> Users.
+// Debe coincidir con public.es_admin() en supabase/migrations.
+const ADMIN_EMAIL = "admin@reypirata.app";
 
 const isProducto = (v: unknown): v is Producto => {
   const p = v as Producto;
@@ -199,6 +202,9 @@ type Store = {
   insumos: Insumo[];
   ventasMillaray: VentaMillaray[];
   hidratado: boolean;
+  sesion: boolean | null; // null = verificando
+  iniciarSesion: (password: string) => Promise<boolean>;
+  cerrarSesion: () => Promise<void>;
   agregarProducto: (p: Omit<Producto, "id">) => void;
   actualizarProducto: (id: string, p: Omit<Producto, "id">) => void;
   eliminarProducto: (id: string) => void;
@@ -251,10 +257,23 @@ const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<Data>(vacio);
   const [hidratado, setHidratado] = useState(false);
+  const [sesion, setSesion] = useState<boolean | null>(null);
   const remoto = useRef(false);
   const ultimaEscritura = useRef<string>("");
 
   useEffect(() => {
+    void supabase.auth.getSession().then(({ data: s }) => setSesion(!!s.session));
+    const { data: sub } = supabase.auth.onAuthStateChange((_evento, s) => setSesion(!!s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // Sin sesión de admin la base de datos rechaza todo: no cargar ni escribir.
+    if (!sesion) {
+      setHidratado(false);
+      setData(vacio);
+      return;
+    }
     let cancelado = false;
     (async () => {
       try {
@@ -287,9 +306,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [sesion]);
 
   useEffect(() => {
+    if (!sesion) return;
     const channel = supabase
       .channel("app_state_sync")
       .on(
@@ -298,7 +318,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         (payload) => {
           const nuevo = payload.new as { data?: unknown; updated_at?: string };
           const ts = nuevo?.updated_at ?? "";
-          if (ts && ultimaEscritura.current && ts <= ultimaEscritura.current) return;
+          if (ts && ultimaEscritura.current && Date.parse(ts) <= Date.parse(ultimaEscritura.current)) return;
           if (ts) ultimaEscritura.current = ts;
           const incoming = sanea(nuevo?.data);
           remoto.current = true;
@@ -309,10 +329,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => {
       void supabase.removeChannel(channel);
     };
+  }, [sesion]);
+
+  const iniciarSesion = useCallback(async (password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email: ADMIN_EMAIL, password });
+    return !error;
+  }, []);
+
+  const cerrarSesion = useCallback(async () => {
+    await supabase.auth.signOut();
+    try {
+      window.localStorage.removeItem(KEY);
+    } catch {
+      /* almacenamiento no disponible */
+    }
   }, []);
 
   useEffect(() => {
-    if (!hidratado) return;
+    if (!hidratado || !sesion) return;
     try {
       window.localStorage.setItem(KEY, JSON.stringify(data));
     } catch {
@@ -328,7 +362,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .from("app_state")
       .upsert({ id: STATE_ID, data, updated_at: ts })
       .then(() => undefined);
-  }, [data, hidratado]);
+  }, [data, hidratado, sesion]);
 
   const agregarProducto = useCallback((p: Omit<Producto, "id">) => {
     setData((d) => ({ ...d, productos: [...d.productos, { ...p, id: uid() }] }));
@@ -745,6 +779,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       insumos: data.insumos,
       ventasMillaray: data.ventasMillaray,
       hidratado,
+      sesion,
+      iniciarSesion,
+      cerrarSesion,
       agregarProducto,
       actualizarProducto,
       eliminarProducto,
@@ -773,6 +810,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [
       data,
       hidratado,
+      sesion,
+      iniciarSesion,
+      cerrarSesion,
       agregarProducto,
       actualizarProducto,
       eliminarProducto,

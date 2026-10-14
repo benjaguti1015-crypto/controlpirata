@@ -4,6 +4,7 @@ import { ChefHat, Cookie, Flame, Pencil, Plus, Trash2, TriangleAlert, Wheat } fr
 import { toast } from "sonner";
 
 import { AlertaStockWhatsApp } from "@/components/AlertaStockWhatsApp";
+import { AdminGuard } from "@/components/adminguard";
 import { AppShell } from "@/components/AppShell";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,14 @@ type FormState = { nombre: string; costo: string; precio: string; stock: string 
 const vacio: FormState = { nombre: "", costo: "", precio: "", stock: "" };
 
 function ProductosPage() {
+  return (
+    <AdminGuard>
+      <ProductosContenido />
+    </AdminGuard>
+  );
+}
+
+function ProductosContenido() {
   const {
     productos,
     insumos,
