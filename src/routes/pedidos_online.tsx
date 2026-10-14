@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ShoppingBag, CheckCircle2, MessageCircle, Plus, Minus, Package } from "lucide-react";
 import { toast } from "sonner";
 
@@ -7,8 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { supabase } from "@/integrations/supabase/client";
 import { fechaChile } from "@/lib/fecha";
-import { money, useStore, type ItemPedido } from "@/lib/store";
+import { money } from "@/lib/store";
+
+// El público solo ve este catálogo reducido; precios y stock se validan de nuevo en el servidor.
+type ProductoPublico = { id: string; nombre: string; precio: number; stock: number };
+type ItemSeleccionado = { productoId: string; nombre: string; cantidad: number; precio: number };
 
 export const Route = createFileRoute("/pedidos_online")({
   head: () => ({
@@ -24,7 +29,23 @@ export const Route = createFileRoute("/pedidos_online")({
 });
 
 function PedidosOnlinePage() {
-  const { productos, agregarPedido } = useStore();
+  const [productos, setProductos] = useState<ProductoPublico[]>([]);
+  const [enviando, setEnviando] = useState(false);
+
+  const cargarCatalogo = useCallback(async () => {
+    const { data, error } = await supabase.rpc("catalogo_publico");
+    if (error) {
+      toast.error("No se pudo cargar el catálogo");
+      return;
+    }
+    setProductos(
+      (data ?? []).map((p) => ({ ...p, precio: Number(p.precio), stock: Number(p.stock) })),
+    );
+  }, []);
+
+  useEffect(() => {
+    void cargarCatalogo();
+  }, [cargarCatalogo]);
 
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
@@ -49,7 +70,7 @@ function PedidosOnlinePage() {
     });
   };
 
-  const itemsSeleccionados: ItemPedido[] = Object.entries(cantidades)
+  const itemsSeleccionados: ItemSeleccionado[] = Object.entries(cantidades)
     .map(([prodId, cant]) => {
       const prod = productos.find((p) => p.id === prodId);
       if (!prod || cant <= 0) return null;
@@ -58,14 +79,13 @@ function PedidosOnlinePage() {
         nombre: prod.nombre,
         cantidad: cant,
         precio: prod.precio,
-        costo: prod.costo,
       };
     })
-    .filter((item): item is ItemPedido => item !== null);
+    .filter((item): item is ItemSeleccionado => item !== null);
 
   const totalGeneral = itemsSeleccionados.reduce((s, i) => s + i.precio * i.cantidad, 0);
 
-  const confirmarPedidoOnline = (e: React.FormEvent) => {
+  const confirmarPedidoOnline = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!nombre.trim() || !apellido.trim()) {
@@ -83,8 +103,21 @@ function PedidosOnlinePage() {
 
     const clienteCompleto = `${nombre.trim()} ${apellido.trim()}`;
 
-    // 1. Registra el pedido en tu store (esto descuenta automáticamente el stock de inmediato)
-    agregarPedido(clienteCompleto, telefono.trim(), fecha, itemsSeleccionados);
+    // 1. El servidor valida el pedido, usa sus propios precios y descuenta el stock
+    setEnviando(true);
+    const { error } = await supabase.rpc("crear_pedido_online", {
+      p_cliente: clienteCompleto,
+      p_telefono: telefono.trim(),
+      p_fecha: fecha,
+      p_items: itemsSeleccionados.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad })),
+    });
+    setEnviando(false);
+    if (error) {
+      // P0001 = mensaje propio de la función (stock, teléfono, fecha); el resto se oculta
+      toast.error(error.code === "P0001" ? error.message : "No se pudo registrar el pedido");
+      void cargarCatalogo();
+      return;
+    }
 
     // 2. Prepara el mensaje de WhatsApp para tu número personal: +56949424791
     const numeroReyPirata = "56949424791";
@@ -109,7 +142,8 @@ function PedidosOnlinePage() {
           </div>
           <h1 className="text-2xl font-bold">¡Tu pedido ya está listo!</h1>
           <p className="text-sm text-muted-foreground">
-            Hemos guardado tu pedido correctamente y descontado el stock. Para enviarle el detalle directamente a WhatsApp al Rey Pirata, haz clic en el botón de abajo:
+            Hemos guardado tu pedido correctamente y descontado el stock. Para enviarle el detalle
+            directamente a WhatsApp al Rey Pirata, haz clic en el botón de abajo:
           </p>
           <div className="pt-2">
             <Button asChild className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
@@ -127,6 +161,7 @@ function PedidosOnlinePage() {
               setNombre("");
               setApellido("");
               setTelefono("");
+              void cargarCatalogo();
             }}
           >
             Hacer otro pedido
@@ -194,6 +229,7 @@ function PedidosOnlinePage() {
                     id="fecha"
                     type="date"
                     required
+                    min={fechaChile()}
                     value={fecha}
                     onChange={(e) => setFecha(e.target.value)}
                   />
@@ -230,7 +266,8 @@ function PedidosOnlinePage() {
                         <div className="min-w-0 pr-2">
                           <p className="font-semibold truncate text-sm">{prod.nombre}</p>
                           <p className="text-xs text-muted-foreground">
-                            {money(prod.precio)} · {agotado ? "Agotado" : `Disponibles: ${stockDisponible} u.`}
+                            {money(prod.precio)} ·{" "}
+                            {agotado ? "Agotado" : `Disponibles: ${stockDisponible} u.`}
                           </p>
                         </div>
 
@@ -245,7 +282,9 @@ function PedidosOnlinePage() {
                           >
                             <Minus className="h-3 w-3" />
                           </Button>
-                          <span className="w-6 text-center text-sm font-medium">{cantidadElegida}</span>
+                          <span className="w-6 text-center text-sm font-medium">
+                            {cantidadElegida}
+                          </span>
                           <Button
                             type="button"
                             variant="outline"
@@ -273,7 +312,11 @@ function PedidosOnlinePage() {
                 <span className="text-xl text-primary">{money(totalGeneral)}</span>
               </div>
 
-              <Button type="submit" className="w-full gap-2 text-base h-11" disabled={itemsSeleccionados.length === 0}>
+              <Button
+                type="submit"
+                className="w-full gap-2 text-base h-11"
+                disabled={itemsSeleccionados.length === 0 || enviando}
+              >
                 <MessageCircle className="w-5 h-5" /> Confirmar y Enviar Pedido
               </Button>
             </CardContent>
