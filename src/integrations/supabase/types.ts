@@ -37,24 +37,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      catalogo_publico: {
-        Args: never
-        Returns: {
-          id: string
-          nombre: string
-          precio: number
-          stock: number
-        }[]
-      }
-      crear_pedido_online: {
-        Args: {
-          p_cliente: string
-          p_fecha: string
-          p_items: Json
-          p_telefono: string
-        }
-        Returns: Json
-      }
       es_admin: { Args: never; Returns: boolean }
     }
     Enums: {

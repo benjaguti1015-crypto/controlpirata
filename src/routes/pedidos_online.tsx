@@ -1,19 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
-import { ShoppingBag, CheckCircle2, MessageCircle, Plus, Minus, Package } from "lucide-react";
-import { toast } from "sonner";
+import { MessageCircle, ShoppingBag } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
-import { fechaChile } from "@/lib/fecha";
-import { money } from "@/lib/store";
-
-// El público solo ve este catálogo reducido; precios y stock se validan de nuevo en el servidor.
-type ProductoPublico = { id: string; nombre: string; precio: number; stock: number };
-type ItemSeleccionado = { productoId: string; nombre: string; cantidad: number; precio: number };
+import { Card } from "@/components/ui/card";
 
 export const Route = createFileRoute("/pedidos_online")({
   head: () => ({
@@ -21,308 +10,35 @@ export const Route = createFileRoute("/pedidos_online")({
       { title: "Haz tu pedido | Dulces del Rey Pirata" },
       {
         name: "description",
-        content: "Haz tu pedido online de galletas artesanales de forma rápida y directa.",
+        content: "Haz tu pedido de galletas artesanales directo por WhatsApp.",
       },
     ],
   }),
   component: PedidosOnlinePage,
 });
 
+// Pedidos online desactivados por seguridad: la página no toca la base de datos.
+const URL_WSP = `https://wa.me/56949424791?text=${encodeURIComponent(
+  "¡Hola! Quiero hacer un pedido de galletas 🍪",
+)}`;
+
 function PedidosOnlinePage() {
-  const [productos, setProductos] = useState<ProductoPublico[]>([]);
-  const [enviando, setEnviando] = useState(false);
-
-  const cargarCatalogo = useCallback(async () => {
-    const { data, error } = await supabase.rpc("catalogo_publico");
-    if (error) {
-      toast.error("No se pudo cargar el catálogo");
-      return;
-    }
-    setProductos(
-      (data ?? []).map((p) => ({ ...p, precio: Number(p.precio), stock: Number(p.stock) })),
-    );
-  }, []);
-
-  useEffect(() => {
-    void cargarCatalogo();
-  }, [cargarCatalogo]);
-
-  const [nombre, setNombre] = useState("");
-  const [apellido, setApellido] = useState("");
-  const [telefono, setTelefono] = useState("");
-  const [fecha, setFecha] = useState(() => fechaChile());
-
-  // Cantidades seleccionadas por cada producto (productoId -> cantidad)
-  const [cantidades, setCantidades] = useState<Record<string, number>>({});
-  const [enviado, setEnviado] = useState(false);
-  const [mensajeWspUrl, setMensajeWspUrl] = useState("");
-
-  const cambiarCantidad = (id: string, delta: number, stockMaximo: number) => {
-    setCantidades((prev) => {
-      const actual = prev[id] || 0;
-      const nuevo = Math.max(0, Math.min(stockMaximo, actual + delta));
-      if (nuevo === 0) {
-        const copia = { ...prev };
-        delete copia[id];
-        return copia;
-      }
-      return { ...prev, [id]: nuevo };
-    });
-  };
-
-  const itemsSeleccionados: ItemSeleccionado[] = Object.entries(cantidades)
-    .map(([prodId, cant]) => {
-      const prod = productos.find((p) => p.id === prodId);
-      if (!prod || cant <= 0) return null;
-      return {
-        productoId: prod.id,
-        nombre: prod.nombre,
-        cantidad: cant,
-        precio: prod.precio,
-      };
-    })
-    .filter((item): item is ItemSeleccionado => item !== null);
-
-  const totalGeneral = itemsSeleccionados.reduce((s, i) => s + i.precio * i.cantidad, 0);
-
-  const confirmarPedidoOnline = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!nombre.trim() || !apellido.trim()) {
-      toast.error("Por favor ingresa tu nombre y apellido");
-      return;
-    }
-    if (!telefono.trim()) {
-      toast.error("Por favor ingresa tu número de teléfono");
-      return;
-    }
-    if (itemsSeleccionados.length === 0) {
-      toast.error("Selecciona al menos un producto para tu pedido");
-      return;
-    }
-
-    const clienteCompleto = `${nombre.trim()} ${apellido.trim()}`;
-
-    // 1. El servidor valida el pedido, usa sus propios precios y descuenta el stock
-    setEnviando(true);
-    const { error } = await supabase.rpc("crear_pedido_online", {
-      p_cliente: clienteCompleto,
-      p_telefono: telefono.trim(),
-      p_fecha: fecha,
-      p_items: itemsSeleccionados.map((i) => ({ productoId: i.productoId, cantidad: i.cantidad })),
-    });
-    setEnviando(false);
-    if (error) {
-      // P0001 = mensaje propio de la función (stock, teléfono, fecha); el resto se oculta
-      toast.error(error.code === "P0001" ? error.message : "No se pudo registrar el pedido");
-      void cargarCatalogo();
-      return;
-    }
-
-    // 2. Prepara el mensaje de WhatsApp para tu número personal: +56949424791
-    const numeroReyPirata = "56949424791";
-    const lineasTexto = itemsSeleccionados
-      .map((i) => `• ${i.cantidad}x ${i.nombre} (${money(i.precio * i.cantidad)})`)
-      .join("\n");
-
-    const textoWsp = `🍪 *¡Nuevo Pedido Online!* — Dulces del Rey Pirata\n\n*Cliente:* ${clienteCompleto}\n*Teléfono:* ${telefono.trim()}\n*Fecha de entrega:* ${fecha}\n\n*Productos:*\n${lineasTexto}\n\n*Total a pagar:* ${money(totalGeneral)}\n\n¡Hola! Vengo a confirmar mi pedido por la web. ✨`;
-
-    const urlWsp = `https://wa.me/${numeroReyPirata}?text=${encodeURIComponent(textoWsp)}`;
-    setMensajeWspUrl(urlWsp);
-    setEnviado(true);
-    toast.success("¡Pedido registrado con éxito!");
-  };
-
-  if (enviado) {
-    return (
-      <div className="min-h-screen bg-secondary/30 px-4 py-12 flex items-center justify-center">
-        <Card className="max-w-md w-full text-center p-6 space-y-4">
-          <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-            <CheckCircle2 className="w-8 h-8" />
-          </div>
-          <h1 className="text-2xl font-bold">¡Tu pedido ya está listo!</h1>
-          <p className="text-sm text-muted-foreground">
-            Hemos guardado tu pedido correctamente y descontado el stock. Para enviarle el detalle
-            directamente a WhatsApp al Rey Pirata, haz clic en el botón de abajo:
-          </p>
-          <div className="pt-2">
-            <Button asChild className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
-              <a href={mensajeWspUrl} target="_blank" rel="noopener noreferrer">
-                <MessageCircle className="w-5 h-5" /> Enviar comprobante por WhatsApp
-              </a>
-            </Button>
-          </div>
-          <Button
-            variant="ghost"
-            className="w-full text-xs text-muted-foreground"
-            onClick={() => {
-              setEnviado(false);
-              setCantidades({});
-              setNombre("");
-              setApellido("");
-              setTelefono("");
-              void cargarCatalogo();
-            }}
-          >
-            Hacer otro pedido
-          </Button>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-secondary/20 py-8 px-4 sm:px-6">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-extrabold tracking-tight">Dulces del Rey Pirata 🏴‍☠️🍪</h1>
-          <p className="text-sm text-muted-foreground">
-            Selecciona tus galletas favoritas y haz tu pedido en tiempo real.
-          </p>
+    <div className="min-h-screen bg-secondary/30 px-4 py-12 flex items-center justify-center">
+      <Card className="max-w-md w-full text-center p-6 space-y-4">
+        <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+          <ShoppingBag className="w-6 h-6" />
         </div>
-
-        <form onSubmit={confirmarPedidoOnline} className="space-y-6">
-          {/* Datos del cliente */}
-          <Card>
-            <CardContent className="p-5 space-y-4">
-              <h2 className="text-base font-semibold flex items-center gap-2">
-                <ShoppingBag className="w-4 h-4" /> 1. Tus datos de contacto
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="nombre">Nombre</Label>
-                  <Input
-                    id="nombre"
-                    required
-                    value={nombre}
-                    onChange={(e) => setNombre(e.target.value)}
-                    placeholder="Tu nombre"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="apellido">Apellido</Label>
-                  <Input
-                    id="apellido"
-                    required
-                    value={apellido}
-                    onChange={(e) => setApellido(e.target.value)}
-                    placeholder="Tu apellido"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="telefono">Número de Teléfono</Label>
-                  <Input
-                    id="telefono"
-                    type="tel"
-                    required
-                    value={telefono}
-                    onChange={(e) => setTelefono(e.target.value)}
-                    placeholder="+569..."
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="fecha">Fecha del pedido</Label>
-                  <Input
-                    id="fecha"
-                    type="date"
-                    required
-                    min={fechaChile()}
-                    value={fecha}
-                    onChange={(e) => setFecha(e.target.value)}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Listado de Productos */}
-          <Card>
-            <CardContent className="p-5 space-y-4">
-              <h2 className="text-base font-semibold flex items-center gap-2">
-                <Package className="w-4 h-4" /> 2. Elige tus galletas (Stock en tiempo real)
-              </h2>
-
-              <div className="space-y-3">
-                {productos.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    No hay productos disponibles por el momento.
-                  </p>
-                ) : (
-                  productos.map((prod) => {
-                    const stockDisponible = prod.stock;
-                    const cantidadElegida = cantidades[prod.id] || 0;
-                    const agotado = stockDisponible <= 0;
-
-                    return (
-                      <div
-                        key={prod.id}
-                        className={`flex items-center justify-between p-3 rounded-xl border ${
-                          agotado ? "bg-muted/40 opacity-60" : "bg-card"
-                        }`}
-                      >
-                        <div className="min-w-0 pr-2">
-                          <p className="font-semibold truncate text-sm">{prod.nombre}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {money(prod.precio)} ·{" "}
-                            {agotado ? "Agotado" : `Disponibles: ${stockDisponible} u.`}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            disabled={cantidadElegida === 0}
-                            onClick={() => cambiarCantidad(prod.id, -1, stockDisponible)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <span className="w-6 text-center text-sm font-medium">
-                            {cantidadElegida}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8"
-                            disabled={agotado || cantidadElegida >= stockDisponible}
-                            onClick={() => cambiarCantidad(prod.id, 1, stockDisponible)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Resumen y Botón de Enviar */}
-          <Card className="bg-primary/5 border-primary/20">
-            <CardContent className="p-5 space-y-4">
-              <div className="flex justify-between items-center text-base font-bold">
-                <span>Total estimado:</span>
-                <span className="text-xl text-primary">{money(totalGeneral)}</span>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full gap-2 text-base h-11"
-                disabled={itemsSeleccionados.length === 0 || enviando}
-              >
-                <MessageCircle className="w-5 h-5" /> Confirmar y Enviar Pedido
-              </Button>
-            </CardContent>
-          </Card>
-        </form>
-      </div>
+        <h1 className="text-2xl font-bold">Dulces del Rey Pirata 🏴‍☠️🍪</h1>
+        <p className="text-sm text-muted-foreground">
+          Los pedidos online estarán disponibles pronto. Mientras tanto, haz tu pedido por WhatsApp.
+        </p>
+        <Button asChild className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
+          <a href={URL_WSP} target="_blank" rel="noopener noreferrer">
+            <MessageCircle className="w-5 h-5" /> Pedir por WhatsApp
+          </a>
+        </Button>
+      </Card>
     </div>
   );
 }
