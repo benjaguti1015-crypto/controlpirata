@@ -4,27 +4,33 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
+import { useStore } from "@/lib/store";
 
-const PASSWORD_ADMIN = "rey123"; // Puedes cambiar esta contraseña por la que prefieras
-
+// La contraseña se verifica en Supabase Auth, nunca en el navegador.
+// Para cambiarla: Lovable Cloud -> Users -> admin@reypirata.app.
 export function AdminGuard({ children }: { children: ReactNode }) {
-  const [autenticado, setAutenticado] = useState(() => {
-    return sessionStorage.getItem("admin_auth") === "true";
-  });
+  const { sesion, iniciarSesion } = useStore();
   const [password, setPassword] = useState("");
+  const [enviando, setEnviando] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === PASSWORD_ADMIN) {
-      sessionStorage.setItem("admin_auth", "true");
-      setAutenticado(true);
+    setEnviando(true);
+    const ok = await iniciarSesion(password);
+    setEnviando(false);
+    if (ok) {
+      setPassword("");
       toast.success("¡Bienvenido al panel, capitán!");
     } else {
       toast.error("Contraseña incorrecta");
     }
   };
 
-  if (!autenticado) {
+  if (sesion === null) {
+    return <div className="min-h-screen bg-secondary/30" />;
+  }
+
+  if (!sesion) {
     return (
       <div className="min-h-screen bg-secondary/30 flex items-center justify-center p-4">
         <Card className="max-w-sm w-full shadow-lg">
@@ -52,7 +58,7 @@ export function AdminGuard({ children }: { children: ReactNode }) {
                   />
                 </div>
               </div>
-              <Button type="submit" className="w-full">
+              <Button type="submit" className="w-full" disabled={enviando || !password}>
                 Entrar al panel
               </Button>
             </form>
