@@ -4,12 +4,13 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fechaChile } from "@/lib/fecha";
+import { Sincronizador, uid, type EstadoSync } from "@/lib/sync";
 
 export type Producto = {
   id: string;
@@ -202,6 +203,7 @@ type Store = {
   insumos: Insumo[];
   ventasMillaray: VentaMillaray[];
   hidratado: boolean;
+  estadoSync: EstadoSync;
   sesion: boolean | null; // null = verificando
   iniciarSesion: (password: string) => Promise<boolean>;
   cerrarSesion: () => Promise<void>;
@@ -252,14 +254,60 @@ type Store = {
 
 const StoreContext = createContext<Store | null>(null);
 
-const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+// Lectura y escritura en la nube. Solo escribe si nadie más guardó desde la última lectura.
+const backendNube = {
+  leer: async () => {
+    const { data: row, error } = await supabase
+      .from("app_state")
+      .select("data, updated_at")
+      .eq("id", STATE_ID)
+      .maybeSingle();
+    if (error) throw error;
+    if (!row) throw new Error("Sin acceso a los datos");
+    return { data: sanea(row.data), version: row.updated_at };
+  },
+  escribir: async (data: Data, base: string, nueva: string) => {
+    const { data: filas, error } = await supabase
+      .from("app_state")
+      .update({ data, updated_at: nueva })
+      .eq("id", STATE_ID)
+      .eq("updated_at", base)
+      .select("updated_at");
+    if (error) throw error;
+    return filas?.[0]?.updated_at ?? null;
+  },
+};
+
+let alCambiar: (d: Data) => void = () => {};
+let alEstado: (e: EstadoSync) => void = () => {};
+const motor = new Sincronizador<Data>(
+  backendNube,
+  vacio,
+  (d) => alCambiar(d),
+  (e) => alEstado(e),
+);
+
+const cambiar = (aplicar: (d: Data) => Data) => {
+  if (!motor.cambiar(aplicar)) toast.error("Espera a que carguen los datos");
+};
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<Data>(vacio);
   const [hidratado, setHidratado] = useState(false);
+  const [estadoSync, setEstadoSync] = useState<EstadoSync>("ok");
   const [sesion, setSesion] = useState<boolean | null>(null);
-  const remoto = useRef(false);
-  const ultimaEscritura = useRef<string>("");
+
+  useEffect(() => {
+    alCambiar = (d) => {
+      setData(d);
+      setHidratado(motor.listo);
+    };
+    alEstado = setEstadoSync;
+    return () => {
+      alCambiar = () => {};
+      alEstado = () => {};
+    };
+  }, []);
 
   useEffect(() => {
     void supabase.auth.getSession().then(({ data: s }) => setSesion(!!s.session));
@@ -270,63 +318,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Sin sesión de admin la base de datos rechaza todo: no cargar ni escribir.
     if (!sesion) {
-      setHidratado(false);
-      setData(vacio);
+      motor.reiniciar();
       return;
     }
-    let cancelado = false;
-    (async () => {
-      try {
-        const { data: row } = await supabase
-          .from("app_state")
-          .select("data, updated_at")
-          .eq("id", STATE_ID)
-          .maybeSingle();
-        if (cancelado) return;
-        if (row?.updated_at) ultimaEscritura.current = row.updated_at;
-        const nube = sanea(row?.data);
-        if (tieneDatos(nube)) {
-          setData(nube);
-        } else {
-          const local = loadLocal();
-          if (tieneDatos(local)) {
-            setData(local);
-            await supabase
-              .from("app_state")
-              .upsert({ id: STATE_ID, data: local, updated_at: new Date().toISOString() });
-          }
-        }
-      } catch {
-        const local = loadLocal();
-        if (!cancelado && tieneDatos(local)) setData(local);
-      } finally {
-        if (!cancelado) setHidratado(true);
-      }
-    })();
-    return () => {
-      cancelado = true;
-    };
-  }, [sesion]);
+    motor.mostrarCopia(loadLocal());
+    void motor.refrescar();
 
-  useEffect(() => {
-    if (!sesion) return;
+    // Al volver a la app (celular en segundo plano, sin señal) traer lo último antes de editar
+    const alVolver = () => {
+      if (document.visibilityState === "visible") void motor.refrescar();
+    };
+    document.addEventListener("visibilitychange", alVolver);
+    window.addEventListener("focus", alVolver);
+    window.addEventListener("online", alVolver);
+
+    const reintento = window.setInterval(() => {
+      if (!motor.listo || motor.hayPendientes) void motor.refrescar();
+    }, 10000);
+
+    const avisarSinGuardar = (e: BeforeUnloadEvent) => {
+      if (motor.hayPendientes) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", avisarSinGuardar);
+
     const channel = supabase
       .channel("app_state_sync")
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "app_state" },
         (payload) => {
-          const nuevo = payload.new as { data?: unknown; updated_at?: string };
-          const ts = nuevo?.updated_at ?? "";
-          if (ts && ultimaEscritura.current && Date.parse(ts) <= Date.parse(ultimaEscritura.current)) return;
-          if (ts) ultimaEscritura.current = ts;
-          const incoming = sanea(nuevo?.data);
-          remoto.current = true;
-          setData(incoming);
+          const ts = (payload.new as { updated_at?: string } | undefined)?.updated_at;
+          const propia = motor.versionConfirmada;
+          if (ts && propia && Date.parse(ts) === Date.parse(propia)) return; // nuestro propio guardado
+          void motor.refrescar();
         },
       )
-      .subscribe();
+      .subscribe((estado) => {
+        // Al reconectar puede que se haya perdido algún aviso
+        if (estado === "SUBSCRIBED") void motor.refrescar();
+      });
+
     return () => {
+      document.removeEventListener("visibilitychange", alVolver);
+      window.removeEventListener("focus", alVolver);
+      window.removeEventListener("online", alVolver);
+      window.removeEventListener("beforeunload", avisarSinGuardar);
+      window.clearInterval(reintento);
       void supabase.removeChannel(channel);
     };
   }, [sesion]);
@@ -352,36 +389,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch {
       /* almacenamiento no disponible */
     }
-    if (remoto.current) {
-      remoto.current = false;
-      return;
-    }
-    const ts = new Date().toISOString();
-    ultimaEscritura.current = ts;
-    void supabase
-      .from("app_state")
-      .upsert({ id: STATE_ID, data, updated_at: ts })
-      .then(() => undefined);
   }, [data, hidratado, sesion]);
 
   const agregarProducto = useCallback((p: Omit<Producto, "id">) => {
-    setData((d) => ({ ...d, productos: [...d.productos, { ...p, id: uid() }] }));
+    cambiar((d) => ({ ...d, productos: [...d.productos, { ...p, id: uid() }] }));
   }, []);
 
   const actualizarProducto = useCallback((id: string, p: Omit<Producto, "id">) => {
-    setData((d) => ({
+    cambiar((d) => ({
       ...d,
       productos: d.productos.map((x) => (x.id === id ? { ...x, ...p, id } : x)),
     }));
   }, []);
 
   const eliminarProducto = useCallback((id: string) => {
-    setData((d) => ({ ...d, productos: d.productos.filter((x) => x.id !== id) }));
+    cambiar((d) => ({ ...d, productos: d.productos.filter((x) => x.id !== id) }));
   }, []);
 
   const agregarPedido = useCallback(
     (cliente: string, telefono: string, fecha: string, items: ItemPedido[], descuento?: number) => {
-      setData((d) => {
+      cambiar((d) => {
         const productos = d.productos.map((prod) => {
           const item = items.find((i) => i.productoId === prod.id);
           return item ? { ...prod, stock: prod.stock - item.cantidad } : prod;
@@ -401,7 +428,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const actualizarPedido = useCallback(
     (id: string, cliente: string, telefono: string, fecha: string, items: ItemPedido[], descuento?: number) => {
-      setData((d) => {
+      cambiar((d) => {
         const pedidoAnterior = d.pedidos.find((p) => p.id === id);
         if (!pedidoAnterior) return d;
 
@@ -442,7 +469,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const entregarPedido = useCallback((id: string) => {
-    setData((d) => {
+    cambiar((d) => {
       const pedido = d.pedidos.find((p) => p.id === id);
       if (!pedido || pedido.estado === "entregado") return d;
       return {
@@ -453,14 +480,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const marcarPedidoPagado = useCallback((id: string, pagado = true) => {
-    setData((d) => ({
+    cambiar((d) => ({
       ...d,
       pedidos: d.pedidos.map((p) => (p.id === id ? { ...p, pagado } : p)),
     }));
   }, []);
 
   const deshacerEntrega = useCallback((id: string) => {
-    setData((d) => ({
+    cambiar((d) => ({
       ...d,
       pedidos: d.pedidos.map((p) => (p.id === id ? { ...p, estado: "pendiente" as const } : p)),
     }));
@@ -468,7 +495,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const registrarVentaRapida = useCallback(
     (items: ItemPedido[], cliente: string, pagado: boolean) => {
-      setData((d) => ({
+      cambiar((d) => ({
         ...d,
         productos: d.productos.map((prod) => {
           const item = items.find((i) => i.productoId === prod.id);
@@ -493,7 +520,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const eliminarPedido = useCallback((id: string) => {
-    setData((d) => {
+    cambiar((d) => {
       const pedido = d.pedidos.find((p) => p.id === id);
       if (!pedido) return d;
 
@@ -514,18 +541,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const agregarInsumo = useCallback((i: Omit<Insumo, "id">) => {
-    setData((d) => ({ ...d, insumos: [...d.insumos, { ...i, id: uid() }] }));
+    cambiar((d) => ({ ...d, insumos: [...d.insumos, { ...i, id: uid() }] }));
   }, []);
 
   const actualizarInsumo = useCallback((id: string, i: Omit<Insumo, "id">) => {
-    setData((d) => ({
+    cambiar((d) => ({
       ...d,
       insumos: d.insumos.map((x) => (x.id === id ? { ...i, id } : x)),
     }));
   }, []);
 
   const eliminarInsumo = useCallback((id: string) => {
-    setData((d) => ({
+    cambiar((d) => ({
       ...d,
       insumos: d.insumos.filter((x) => x.id !== id),
       productos: d.productos.map((p) =>
@@ -537,7 +564,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const guardarReceta = useCallback((productoId: string, receta: Receta | undefined) => {
-    setData((d) => ({
+    cambiar((d) => ({
       ...d,
       productos: d.productos.map((p) => (p.id === productoId ? { ...p, receta } : p)),
     }));
@@ -545,7 +572,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const hornearLote = useCallback((productoId: string, unidades: number) => {
     const faltantes: string[] = [];
-    setData((d) => {
+    cambiar((d) => {
       const producto = d.productos.find((p) => p.id === productoId);
       if (!producto) return d;
       const receta = producto.receta;
@@ -573,7 +600,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const traspasarAMillaray = useCallback((productoId: string, cantidad: number) => {
-    setData((d) => ({
+    cambiar((d) => ({
       ...d,
       productos: d.productos.map((p) =>
         p.id === productoId
@@ -584,7 +611,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const devolverDeMillaray = useCallback((productoId: string, cantidad: number) => {
-    setData((d) => ({
+    cambiar((d) => ({
       ...d,
       productos: d.productos.map((p) =>
         p.id === productoId
@@ -595,7 +622,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const venderMillaray = useCallback((productoId: string, cantidad: number) => {
-    setData((d) => {
+    cambiar((d) => {
       const producto = d.productos.find((p) => p.id === productoId);
       if (!producto) return d;
       const pedido: Pedido = {
@@ -632,7 +659,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       metodoPago: "efectivo" | "transferencia",
       descuento?: number,
     ) => {
-      setData((d) => {
+      cambiar((d) => {
         const producto = d.productos.find((p) => p.id === productoId);
         if (!producto || (producto.millaray ?? 0) < cantidad) return d;
         const fecha = new Date().toISOString();
@@ -679,7 +706,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const marcarVentaMillarayPagada = useCallback((id: string) => {
-    setData((d) => ({
+    cambiar((d) => ({
       ...d,
       ventasMillaray: d.ventasMillaray.map((v) =>
         v.id === id ? { ...v, pagado: !v.pagado } : v,
@@ -688,7 +715,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const eliminarVentaMillaray = useCallback((id: string) => {
-    setData((d) => {
+    cambiar((d) => {
       const venta = d.ventasMillaray.find((v) => v.id === id);
       if (!venta) return { ...d, ventasMillaray: d.ventasMillaray.filter((v) => v.id !== id) };
 
@@ -721,7 +748,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const cerrarDia = useCallback(() => {
     let cierre: Cierre | null = null;
-    setData((d) => {
+    cambiar((d) => {
       const entregados = d.pedidos.filter(cuentaComoVenta);
       if (entregados.length === 0) return d;
       const ingresos = entregados.reduce((s, p) => s + totalPedido(p), 0);
@@ -741,7 +768,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
         }),
       );
-      cierre = {
+      const nuevo: Cierre = {
         id: uid(),
         fecha: new Date().toISOString(),
         ingresos,
@@ -751,24 +778,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         unidades,
         detalle: [...detalleMap.values()],
       };
+      cierre = nuevo;
       return {
         ...d,
         pedidos: d.pedidos.filter((p) => !cuentaComoVenta(p)),
-        cierres: [...d.cierres, cierre],
+        cierres: [...d.cierres, nuevo],
       };
     });
     return cierre;
   }, []);
 
   const actualizarCierre = useCallback((id: string, c: Omit<Cierre, "id">) => {
-    setData((d) => ({
+    cambiar((d) => ({
       ...d,
       cierres: d.cierres.map((x) => (x.id === id ? { ...x, ...c, id } : x)),
     }));
   }, []);
 
   const eliminarCierre = useCallback((id: string) => {
-    setData((d) => ({ ...d, cierres: d.cierres.filter((x) => x.id !== id) }));
+    cambiar((d) => ({ ...d, cierres: d.cierres.filter((x) => x.id !== id) }));
   }, []);
 
   const value = useMemo(
@@ -779,6 +807,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       insumos: data.insumos,
       ventasMillaray: data.ventasMillaray,
       hidratado,
+      estadoSync,
       sesion,
       iniciarSesion,
       cerrarSesion,
@@ -810,6 +839,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [
       data,
       hidratado,
+      estadoSync,
       sesion,
       iniciarSesion,
       cerrarSesion,
