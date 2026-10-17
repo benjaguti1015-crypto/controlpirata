@@ -1,5 +1,15 @@
 import { Link } from "@tanstack/react-router";
-import { Cookie, LayoutDashboard, LogOut, Package, ShoppingBag, Store, Wheat } from "lucide-react";
+import {
+  CloudOff,
+  Cookie,
+  LayoutDashboard,
+  LoaderCircle,
+  LogOut,
+  Package,
+  ShoppingBag,
+  Store,
+  Wheat,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "@/lib/store";
 
@@ -12,7 +22,7 @@ const nav = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { cerrarSesion } = useStore();
+  const { cerrarSesion, estadoSync } = useStore();
   return (
     <div className="min-h-screen pb-24 md:pb-0">
       <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur">
@@ -31,6 +41,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
           </Link>
           <div className="flex items-center gap-1">
+            {estadoSync === "guardando" && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground" role="status">
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> Guardando
+              </span>
+            )}
+            {estadoSync === "error" && (
+              <span
+                className="flex items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive"
+                role="alert"
+              >
+                <CloudOff className="h-3.5 w-3.5" /> Sin guardar
+              </span>
+            )}
             <nav className="hidden items-center gap-1 md:flex">
               {nav.map((item) => (
                 <Link
