@@ -8,6 +8,7 @@ import {
   Package,
   ShoppingBag,
   Store,
+  UserRound,
   Wheat,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -19,6 +20,7 @@ const nav = [
   { to: "/pedidos", label: "Pedidos", icon: ShoppingBag },
   { to: "/insumos", label: "Insumos", icon: Wheat },
   { to: "/millaray", label: "Millaray", icon: Store },
+  { to: "/chico-alex", label: "Alex", icon: UserRound },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -82,7 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border/70 bg-background/95 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-border/70 bg-background/95 backdrop-blur md:hidden">
         {nav.map((item) => (
           <Link
             key={item.to}
