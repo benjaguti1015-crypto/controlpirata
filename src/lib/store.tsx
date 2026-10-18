@@ -19,6 +19,7 @@ export type Producto = {
   precio: number;
   stock: number;
   millaray?: number | undefined;
+  alex?: number | undefined; // galletas en poder de Chico Alex
   receta?: Receta | undefined;
 };
 
@@ -78,12 +79,29 @@ export type Cierre = {
   detalle?: ItemPedido[] | undefined;
 };
 
+export type VentaAlex = {
+  id: string;
+  pedidoId: string; // pedido que la suma a los ingresos del negocio
+  fecha: string;
+  cliente: string;
+  items: { productoId: string; nombre: string; cantidad: number; precio: number }[];
+  metodoPago: "efectivo" | "transferencia";
+  sueldoPagado: boolean;
+};
+
+/** Sueldo de Alex por cada galleta vendida. */
+export const SUELDO_POR_GALLETA = 500;
+
+export const unidadesVentaAlex = (v: VentaAlex) => v.items.reduce((s, i) => s + i.cantidad, 0);
+export const totalVentaAlex = (v: VentaAlex) => v.items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+
 type Data = {
   productos: Producto[];
   pedidos: Pedido[];
   cierres: Cierre[];
   insumos: Insumo[];
   ventasMillaray: VentaMillaray[];
+  ventasAlex: VentaAlex[];
 };
 
 const KEY = "dulces-rey-pirata-v1";
@@ -91,6 +109,8 @@ const STATE_ID = "main";
 // Cuenta única del panel: la contraseña compartida se crea en Lovable Cloud -> Users.
 // Debe coincidir con public.es_admin() en supabase/migrations.
 const ADMIN_EMAIL = "admin@reypirata.app";
+// Cuenta de Chico Alex: solo accede a su panel (/alex). Debe coincidir con public.es_alex().
+const ALEX_EMAIL = "alex@reypirata.app";
 
 const isProducto = (v: unknown): v is Producto => {
   const p = v as Producto;
@@ -161,7 +181,28 @@ const isVentaMillaray = (v: unknown): v is VentaMillaray => {
   );
 };
 
-const vacio: Data = { productos: [], pedidos: [], cierres: [], insumos: [], ventasMillaray: [] };
+const isVentaAlex = (v: unknown): v is VentaAlex => {
+  const x = v as VentaAlex;
+  return (
+    !!x &&
+    typeof x.id === "string" &&
+    typeof x.pedidoId === "string" &&
+    typeof x.fecha === "string" &&
+    typeof x.cliente === "string" &&
+    Array.isArray(x.items) &&
+    (x.metodoPago === "efectivo" || x.metodoPago === "transferencia") &&
+    typeof x.sueldoPagado === "boolean"
+  );
+};
+
+const vacio: Data = {
+  productos: [],
+  pedidos: [],
+  cierres: [],
+  insumos: [],
+  ventasMillaray: [],
+  ventasAlex: [],
+};
 
 function sanea(raw: unknown): Data {
   const parsed = (raw ?? {}) as Partial<Data>;
@@ -173,6 +214,7 @@ function sanea(raw: unknown): Data {
     ventasMillaray: Array.isArray(parsed.ventasMillaray)
       ? parsed.ventasMillaray.filter(isVentaMillaray)
       : [],
+    ventasAlex: Array.isArray(parsed.ventasAlex) ? parsed.ventasAlex.filter(isVentaAlex) : [],
   };
 }
 
@@ -202,10 +244,13 @@ type Store = {
   cierres: Cierre[];
   insumos: Insumo[];
   ventasMillaray: VentaMillaray[];
+  ventasAlex: VentaAlex[];
   hidratado: boolean;
   estadoSync: EstadoSync;
   sesion: boolean | null; // null = verificando
+  sesionAlex: boolean | null;
   iniciarSesion: (password: string) => Promise<boolean>;
+  iniciarSesionAlex: (password: string) => Promise<boolean>;
   cerrarSesion: () => Promise<void>;
   agregarProducto: (p: Omit<Producto, "id">) => void;
   actualizarProducto: (id: string, p: Omit<Producto, "id">) => void;
@@ -250,6 +295,10 @@ type Store = {
   ) => void;
   marcarVentaMillarayPagada: (id: string) => void;
   eliminarVentaMillaray: (id: string) => void;
+  traspasarAAlex: (productoId: string, cantidad: number) => void;
+  devolverDeAlex: (productoId: string, cantidad: number) => void;
+  eliminarVentaAlex: (id: string) => void;
+  pagarSueldoAlex: () => void;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -295,7 +344,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<Data>(vacio);
   const [hidratado, setHidratado] = useState(false);
   const [estadoSync, setEstadoSync] = useState<EstadoSync>("ok");
-  const [sesion, setSesion] = useState<boolean | null>(null);
+  // undefined = verificando; null = sin sesión
+  const [email, setEmail] = useState<string | null | undefined>(undefined);
+  const sesion = email === undefined ? null : email === ADMIN_EMAIL;
+  const sesionAlex = email === undefined ? null : email === ALEX_EMAIL;
 
   useEffect(() => {
     alCambiar = (d) => {
@@ -310,8 +362,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data: s }) => setSesion(!!s.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_evento, s) => setSesion(!!s));
+    void supabase.auth
+      .getSession()
+      .then(({ data: s }) => setEmail(s.session?.user.email ?? null));
+    const { data: sub } = supabase.auth.onAuthStateChange((_evento, s) =>
+      setEmail(s?.user.email ?? null),
+    );
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -370,6 +426,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const iniciarSesion = useCallback(async (password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email: ADMIN_EMAIL, password });
+    return !error;
+  }, []);
+
+  const iniciarSesionAlex = useCallback(async (password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email: ALEX_EMAIL, password });
     return !error;
   }, []);
 
@@ -746,6 +807,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const traspasarAAlex = useCallback((productoId: string, cantidad: number) => {
+    cambiar((d) => ({
+      ...d,
+      productos: d.productos.map((p) =>
+        p.id === productoId && p.stock >= cantidad
+          ? { ...p, stock: p.stock - cantidad, alex: (p.alex ?? 0) + cantidad }
+          : p,
+      ),
+    }));
+  }, []);
+
+  const devolverDeAlex = useCallback((productoId: string, cantidad: number) => {
+    cambiar((d) => ({
+      ...d,
+      productos: d.productos.map((p) =>
+        p.id === productoId && (p.alex ?? 0) >= cantidad
+          ? { ...p, stock: p.stock + cantidad, alex: (p.alex ?? 0) - cantidad }
+          : p,
+      ),
+    }));
+  }, []);
+
+  // Quita la venta, devuelve las galletas a Alex y su ingreso (si el día ya se cerró, el cierre no cambia)
+  const eliminarVentaAlex = useCallback((id: string) => {
+    cambiar((d) => {
+      const venta = d.ventasAlex.find((v) => v.id === id);
+      if (!venta) return d;
+      return {
+        ...d,
+        productos: d.productos.map((p) => {
+          const n = venta.items
+            .filter((i) => i.productoId === p.id)
+            .reduce((s, i) => s + i.cantidad, 0);
+          return n > 0 ? { ...p, alex: (p.alex ?? 0) + n } : p;
+        }),
+        pedidos: d.pedidos.filter((p) => p.id !== venta.pedidoId),
+        ventasAlex: d.ventasAlex.filter((v) => v.id !== id),
+      };
+    });
+  }, []);
+
+  const pagarSueldoAlex = useCallback(() => {
+    cambiar((d) => ({
+      ...d,
+      ventasAlex: d.ventasAlex.map((v) => (v.sueldoPagado ? v : { ...v, sueldoPagado: true })),
+    }));
+  }, []);
+
   const cerrarDia = useCallback(() => {
     let cierre: Cierre | null = null;
     cambiar((d) => {
@@ -806,10 +915,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cierres: data.cierres,
       insumos: data.insumos,
       ventasMillaray: data.ventasMillaray,
+      ventasAlex: data.ventasAlex,
       hidratado,
       estadoSync,
       sesion,
+      sesionAlex,
       iniciarSesion,
+      iniciarSesionAlex,
       cerrarSesion,
       agregarProducto,
       actualizarProducto,
@@ -835,13 +947,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       registrarVentaMillaray,
       marcarVentaMillarayPagada,
       eliminarVentaMillaray,
+      traspasarAAlex,
+      devolverDeAlex,
+      eliminarVentaAlex,
+      pagarSueldoAlex,
     }),
     [
       data,
       hidratado,
       estadoSync,
       sesion,
+      sesionAlex,
       iniciarSesion,
+      iniciarSesionAlex,
       cerrarSesion,
       agregarProducto,
       actualizarProducto,
@@ -867,6 +985,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       registrarVentaMillaray,
       marcarVentaMillarayPagada,
       eliminarVentaMillaray,
+      traspasarAAlex,
+      devolverDeAlex,
+      eliminarVentaAlex,
+      pagarSueldoAlex,
     ],
   );
 

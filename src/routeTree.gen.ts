@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AlexRouteImport } from './routes/alex'
+import { Route as ChicoAlexRouteImport } from './routes/chico-alex'
 import { Route as InsumosRouteImport } from './routes/insumos'
 import { Route as MillarayRouteImport } from './routes/millaray'
 import { Route as PedidosRouteImport } from './routes/pedidos'
@@ -20,6 +22,16 @@ import { Route as TransferenciaRouteImport } from './routes/transferencia'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AlexRoute = AlexRouteImport.update({
+  id: '/alex',
+  path: '/alex',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChicoAlexRoute = ChicoAlexRouteImport.update({
+  id: '/chico-alex',
+  path: '/chico-alex',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InsumosRoute = InsumosRouteImport.update({
@@ -55,6 +67,8 @@ const TransferenciaRoute = TransferenciaRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/alex': typeof AlexRoute
+  '/chico-alex': typeof ChicoAlexRoute
   '/insumos': typeof InsumosRoute
   '/millaray': typeof MillarayRoute
   '/pedidos': typeof PedidosRoute
@@ -64,6 +78,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/alex': typeof AlexRoute
+  '/chico-alex': typeof ChicoAlexRoute
   '/insumos': typeof InsumosRoute
   '/millaray': typeof MillarayRoute
   '/pedidos': typeof PedidosRoute
@@ -74,6 +90,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/alex': typeof AlexRoute
+  '/chico-alex': typeof ChicoAlexRoute
   '/insumos': typeof InsumosRoute
   '/millaray': typeof MillarayRoute
   '/pedidos': typeof PedidosRoute
@@ -85,6 +103,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/alex'
+    | '/chico-alex'
     | '/insumos'
     | '/millaray'
     | '/pedidos'
@@ -94,6 +114,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/alex'
+    | '/chico-alex'
     | '/insumos'
     | '/millaray'
     | '/pedidos'
@@ -103,6 +125,8 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/alex'
+    | '/chico-alex'
     | '/insumos'
     | '/millaray'
     | '/pedidos'
@@ -113,6 +137,8 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AlexRoute: typeof AlexRoute
+  ChicoAlexRoute: typeof ChicoAlexRoute
   InsumosRoute: typeof InsumosRoute
   MillarayRoute: typeof MillarayRoute
   PedidosRoute: typeof PedidosRoute
@@ -128,6 +154,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/alex': {
+      id: '/alex'
+      path: '/alex'
+      fullPath: '/alex'
+      preLoaderRoute: typeof AlexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chico-alex': {
+      id: '/chico-alex'
+      path: '/chico-alex'
+      fullPath: '/chico-alex'
+      preLoaderRoute: typeof ChicoAlexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/insumos': {
@@ -177,6 +217,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AlexRoute: AlexRoute,
+  ChicoAlexRoute: ChicoAlexRoute,
   InsumosRoute: InsumosRoute,
   MillarayRoute: MillarayRoute,
   PedidosRoute: PedidosRoute,
