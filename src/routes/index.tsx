@@ -28,7 +28,16 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { HistorialCierres } from "@/components/HistorialCierres";
-import { useStore, money, totalPedido, costoPedido, cuentaComoVenta, esPendiente } from "@/lib/store";
+import {
+  useStore,
+  money,
+  totalPedido,
+  costoPedido,
+  cuentaComoVenta,
+  esPendiente,
+  desglosePorCanal,
+} from "@/lib/store";
+import { CANALES, DesgloseCanales } from "@/components/DesgloseCanales";
 import { ventasPorDia, ventasPorProducto } from "@/lib/metricas";
 import { VentasDiarias } from "@/components/VentasDiarias";
 import { VentaRapida } from "@/components/VentaRapida";
@@ -68,6 +77,7 @@ function Dashboard() {
     const semana = dias.slice(-7);
 
     return {
+      porCanal: desglosePorCanal(entregados),
       ingresos,
       costos,
       utilidad: ingresos - costos,
@@ -116,6 +126,9 @@ function Dashboard() {
                   Se guardarán {money(m.ingresos)} en ventas y {money(m.utilidad)} de utilidad en tu
                   historial. Los pedidos entregados se archivan y las métricas del día vuelven a
                   cero. Los pedidos pendientes se mantienen.
+                  <span className="mt-2 block">
+                    {CANALES.map((c) => `${c.label}: ${money(m.porCanal[c.canal].ingresos)}`).join(" · ")}
+                  </span>
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -124,8 +137,13 @@ function Dashboard() {
                   onClick={() => {
                     const cierre = cerrarDia();
                     if (cierre) {
+                      const pc = cierre.porCanal;
                       toast.success("Día cerrado", {
-                        description: `${money(cierre.ingresos)} en ventas guardados en el historial.`,
+                        description: `${money(cierre.ingresos)} en ventas guardados en el historial.${
+                          pc
+                            ? ` ${CANALES.map((c) => `${c.label} ${money(pc[c.canal].ingresos)}`).join(" · ")}`
+                            : ""
+                        }`,
                       });
                     } else {
                       toast.error("No hay pedidos entregados para cerrar el día.");
@@ -149,6 +167,10 @@ function Dashboard() {
             value={String(m.pendientes.length)}
             hint={`${money(m.valorPendiente)} por entregar o cobrar`}
           />
+        </div>
+
+        <div className="mt-5">
+          <DesgloseCanales desglose={m.porCanal} />
         </div>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-2">

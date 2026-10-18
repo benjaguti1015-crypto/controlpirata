@@ -77,7 +77,11 @@ export type Cierre = {
   pedidos: number;
   unidades: number;
   detalle?: ItemPedido[] | undefined;
+  porCanal?: DesgloseCanales | undefined; // cuánto vendió cada punto de venta ese día
 };
+
+export type Canal = "directo" | "millaray" | "alex";
+export type DesgloseCanales = Record<Canal, { ingresos: number; unidades: number }>;
 
 export type VentaAlex = {
   id: string;
@@ -887,6 +891,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         unidades,
         detalle: [...detalleMap.values()],
       };
+      nuevo.porCanal = desglosePorCanal(entregados);
       cierre = nuevo;
       return {
         ...d,
@@ -1019,3 +1024,24 @@ export const totalPedido = (p: Pedido) => {
 
 export const costoPedido = (p: Pedido) =>
   p.items.reduce((s, i) => s + i.costo * i.cantidad, 0);
+/** Punto de venta de un pedido: las ventas de Millaray y Alex se registran con su prefijo. */
+export const canalPedido = (p: Pedido): Canal =>
+  p.cliente.startsWith("Alex · ")
+    ? "alex"
+    : p.cliente.startsWith("Millaray · ")
+      ? "millaray"
+      : "directo";
+
+export const desglosePorCanal = (pedidos: Pedido[]): DesgloseCanales => {
+  const r: DesgloseCanales = {
+    directo: { ingresos: 0, unidades: 0 },
+    millaray: { ingresos: 0, unidades: 0 },
+    alex: { ingresos: 0, unidades: 0 },
+  };
+  for (const p of pedidos) {
+    const c = r[canalPedido(p)];
+    c.ingresos += totalPedido(p);
+    c.unidades += p.items.reduce((s, i) => s + i.cantidad, 0);
+  }
+  return r;
+};
