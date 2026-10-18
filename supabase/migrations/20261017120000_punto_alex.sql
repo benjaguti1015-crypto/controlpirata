@@ -8,9 +8,9 @@ RETURNS boolean
 LANGUAGE sql
 STABLE
 SET search_path = public
-AS $$
+AS $fn$
   SELECT coalesce(auth.jwt() ->> 'email', '') = 'alex@reypirata.app'
-$$;
+$fn$;
 
 -- Lo que ve Alex: su stock, sus ventas aún no liquidadas y su sueldo pendiente
 CREATE OR REPLACE FUNCTION public.alex_panel()
@@ -19,7 +19,7 @@ LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
-AS $$
+AS $fn$
 DECLARE
   v_data jsonb;
   v_ventas jsonb;
@@ -49,7 +49,7 @@ BEGIN
     'ventas', v_ventas
   );
 END;
-$$;
+$fn$;
 
 -- Venta de Alex: descuenta su stock, registra la venta y la suma a los ingresos del negocio
 CREATE OR REPLACE FUNCTION public.alex_vender(p_cliente text, p_items jsonb, p_metodo text)
@@ -57,7 +57,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $$
+AS $fn$
 DECLARE
   v_data jsonb;
   v_updated timestamptz;
@@ -155,7 +155,7 @@ BEGIN
 
   RETURN jsonb_build_object('id', v_venta_id);
 END;
-$$;
+$fn$;
 
 -- Deshacer una venta de Alex: devuelve las galletas a su stock y quita el ingreso
 CREATE OR REPLACE FUNCTION public.alex_deshacer(p_venta_id text)
@@ -163,7 +163,7 @@ RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $$
+AS $fn$
 DECLARE
   v_data jsonb;
   v_updated timestamptz;
@@ -191,13 +191,13 @@ BEGIN
     RAISE EXCEPTION 'Esa venta ya no existe';
   END IF;
   IF coalesce((v_venta ->> 'sueldoPagado')::boolean, false) THEN
-    RAISE EXCEPTION 'Esa venta ya se pagó en tu sueldo; pídele al dueño que la corrija';
+    RAISE EXCEPTION 'Esa venta ya se pagó en tu sueldo. Pídele al dueño que la corrija';
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM jsonb_array_elements(coalesce(v_data -> 'pedidos', '[]'::jsonb)) p
     WHERE p ->> 'id' = v_venta ->> 'pedidoId'
   ) THEN
-    RAISE EXCEPTION 'El día ya se cerró; pídele al dueño que la corrija';
+    RAISE EXCEPTION 'El día ya se cerró. Pídele al dueño que la corrija';
   END IF;
 
   v_productos := coalesce(v_data -> 'productos', '[]'::jsonb);
@@ -232,7 +232,7 @@ BEGIN
       updated_at = greatest(now(), coalesce(v_updated, now()) + interval '1 millisecond')
   WHERE id = 'main';
 END;
-$$;
+$fn$;
 
 REVOKE ALL ON FUNCTION public.alex_panel() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.alex_vender(text, jsonb, text) FROM PUBLIC;
