@@ -39,6 +39,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { money, useStore, type Cierre, type ItemPedido } from "@/lib/store";
+import { CANALES } from "@/components/DesgloseCanales";
 
 const fechaCorta = (iso: string) =>
   new Date(iso).toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
@@ -339,6 +340,11 @@ export function HistorialCierres({ cierres }: { cierres: Cierre[] }) {
                     </AlertDialog>
                   </span>
                 </div>
+                {c.porCanal ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {CANALES.map((k) => `${k.label} ${money(c.porCanal![k.canal].ingresos)}`).join(" · ")}
+                  </p>
+                ) : null}
                 {c.detalle && c.detalle.length > 0 ? (
                   <ul className="mt-1.5 space-y-0.5 pl-1 text-xs text-muted-foreground">
                     {c.detalle.map((i) => (
