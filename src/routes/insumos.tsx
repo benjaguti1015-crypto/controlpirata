@@ -91,7 +91,7 @@ function InsumosPage() {
 
     const payload = { nombre: form.nombre.trim(), stock, unidad: form.unidad, minimo };
     if (editando) {
-      actualizarInsumo(editando.id, payload);
+      actualizarInsumo(editando.id, payload, editando.stock);
       toast.success("Insumo actualizado");
     } else {
       agregarInsumo(payload);
@@ -148,6 +148,7 @@ function InsumosPage() {
                           variant="ghost"
                           size="icon"
                           onClick={() => {
+                            if (!window.confirm(`¿Eliminar el insumo ${i.nombre}?`)) return;
                             eliminarInsumo(i.id);
                             toast.success("Insumo eliminado");
                           }}

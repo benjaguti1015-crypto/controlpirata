@@ -168,7 +168,7 @@ function ProductosContenido() {
 
     const payload = { nombre: form.nombre.trim(), costo, precio, stock };
     if (editando) {
-      actualizarProducto(editando.id, payload);
+      actualizarProducto(editando.id, payload, editando.stock);
       toast.success("Producto actualizado");
     } else {
       agregarProducto(payload);
@@ -249,6 +249,7 @@ function ProductosContenido() {
                         variant="ghost"
                         size="icon"
                         onClick={() => {
+                          if (!window.confirm(`¿Eliminar ${p.nombre} del inventario?`)) return;
                           eliminarProducto(p.id);
                           toast.success("Producto eliminado");
                         }}

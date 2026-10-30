@@ -43,6 +43,8 @@ export class Sincronizador<T> {
   private quiereRefrescar = false;
   // Escritura que falló sin respuesta (mala señal): puede que sí haya llegado al servidor
   private dudosa: { version: string; cambios: number } | null = null;
+  // Con sesión iniciada: se aceptan cambios aunque la nube aún no cargue
+  private activo = false;
   private backend: Backend<T>;
   private vacio: T;
   private alCambiar: (data: T) => void;
@@ -73,16 +75,21 @@ export class Sincronizador<T> {
     return this.confirmado?.version ?? null;
   }
 
-  /** Muestra una copia local mientras carga la nube (solo lectura). */
+  /** Muestra una copia local mientras carga la nube y empieza a aceptar cambios. */
   mostrarCopia(data: T) {
+    this.activo = true;
     if (this.confirmado) return;
     this.local = data;
     this.alCambiar(data);
   }
 
-  /** Aplica un cambio al instante y lo encola para guardarlo. Devuelve false si aún no carga. */
+  /**
+   * Aplica un cambio al instante y lo encola para guardarlo. Si la nube aún no carga (mala señal
+   * al abrir), el cambio espera y se aplica sobre los datos de la nube apenas lleguen.
+   * Devuelve false solo si no hay sesión.
+   */
   cambiar(aplicar: (d: T) => T) {
-    if (!this.confirmado) return false;
+    if (!this.activo) return false;
     const cambio: Cambio<T> = { aplicar, ids: [] };
     this.local = this.ejecutar(cambio, this.local);
     this.pendientes.push(cambio);
@@ -102,6 +109,7 @@ export class Sincronizador<T> {
     this.pendientes = [];
     this.quiereRefrescar = false;
     this.dudosa = null;
+    this.activo = false;
     this.local = this.vacio;
     this.alCambiar(this.vacio);
     this.alEstado("ok");

@@ -66,6 +66,7 @@ export type VentaMillaray = {
   pagado: boolean;
   fecha: string;
   descuento?: number | undefined; // Descuento opcional en ventas de Millaray
+  pedidoId?: string | undefined; // pedido que la suma a los ingresos (ventas antiguas no lo tienen)
 };
 
 export type Cierre = {
@@ -199,6 +200,14 @@ const isVentaAlex = (v: unknown): v is VentaAlex => {
   );
 };
 
+/** Unidades de un producto en un pedido (suma todas las líneas, por si se repite). */
+const unidadesDe = (items: { productoId: string; cantidad: number }[], productoId: string) =>
+  items.filter((i) => i.productoId === productoId).reduce((s, i) => s + i.cantidad, 0);
+
+/** Descuento válido entre 0 y 100; cualquier otro valor se ignora. */
+const descuentoValido = (d: number | undefined) =>
+  d !== undefined && Number.isFinite(d) && d > 0 ? Math.min(100, d) : undefined;
+
 const vacio: Data = {
   productos: [],
   pedidos: [],
@@ -263,9 +272,9 @@ type Store = {
   sesionAlex: boolean | null;
   iniciarSesion: (password: string) => Promise<boolean>;
   iniciarSesionAlex: (password: string) => Promise<boolean>;
-  cerrarSesion: () => Promise<void>;
+  cerrarSesion: () => Promise<boolean>;
   agregarProducto: (p: Omit<Producto, "id">) => void;
-  actualizarProducto: (id: string, p: Omit<Producto, "id">) => void;
+  actualizarProducto: (id: string, p: Omit<Producto, "id">, stockAnterior?: number) => void;
   eliminarProducto: (id: string) => void;
   agregarPedido: (
     cliente: string,
@@ -291,7 +300,7 @@ type Store = {
   actualizarCierre: (id: string, c: Omit<Cierre, "id">) => void;
   eliminarCierre: (id: string) => void;
   agregarInsumo: (i: Omit<Insumo, "id">) => void;
-  actualizarInsumo: (id: string, i: Omit<Insumo, "id">) => void;
+  actualizarInsumo: (id: string, i: Omit<Insumo, "id">, stockAnterior?: number) => void;
   eliminarInsumo: (id: string) => void;
   guardarReceta: (productoId: string, receta: Receta | undefined) => void;
   hornearLote: (productoId: string, unidades: number) => { faltantes: string[] };
@@ -310,7 +319,7 @@ type Store = {
   traspasarAAlex: (productoId: string, cantidad: number) => void;
   devolverDeAlex: (productoId: string, cantidad: number) => void;
   eliminarVentaAlex: (id: string) => void;
-  pagarSueldoAlex: () => void;
+  pagarSueldoAlex: (ids: string[]) => void;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -359,7 +368,7 @@ const motor = new Sincronizador<Data>(
 );
 
 const cambiar = (aplicar: (d: Data) => Data) => {
-  if (!motor.cambiar(aplicar)) toast.error("Espera a que carguen los datos");
+  if (!motor.cambiar(aplicar)) toast.error("Inicia sesión para guardar cambios");
 };
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -457,12 +466,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const cerrarSesion = useCallback(async () => {
+    // Cerrar sesión borra lo que aún no llega a la nube
+    if (motor.hayPendientes) {
+      toast.error("Hay cambios sin guardar", {
+        description: "Espera a que se guarden (revisa tu conexión) antes de cerrar sesión.",
+      });
+      void motor.refrescar();
+      return false;
+    }
     await supabase.auth.signOut();
     try {
       window.localStorage.removeItem(KEY);
     } catch {
       /* almacenamiento no disponible */
     }
+    return true;
   }, []);
 
   useEffect(() => {
@@ -478,12 +496,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     cambiar((d) => ({ ...d, productos: [...d.productos, { ...p, id: uid() }] }));
   }, []);
 
-  const actualizarProducto = useCallback((id: string, p: Omit<Producto, "id">) => {
-    cambiar((d) => ({
-      ...d,
-      productos: d.productos.map((x) => (x.id === id ? { ...x, ...p, id } : x)),
-    }));
-  }, []);
+  // El stock se aplica como diferencia: si alguien vendió mientras se editaba, esa venta no se pierde
+  const actualizarProducto = useCallback(
+    (id: string, p: Omit<Producto, "id">, stockAnterior?: number) => {
+      cambiar((d) => ({
+        ...d,
+        productos: d.productos.map((x) =>
+          x.id === id
+            ? {
+                ...x,
+                ...p,
+                id,
+                stock: stockAnterior === undefined ? p.stock : x.stock + p.stock - stockAnterior,
+              }
+            : x,
+        ),
+      }));
+    },
+    [],
+  );
 
   const eliminarProducto = useCallback((id: string) => {
     cambiar((d) => ({ ...d, productos: d.productos.filter((x) => x.id !== id) }));
@@ -493,14 +524,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (cliente: string, telefono: string, fecha: string, items: ItemPedido[], descuento?: number) => {
       cambiar((d) => {
         const productos = d.productos.map((prod) => {
-          const item = items.find((i) => i.productoId === prod.id);
-          return item ? { ...prod, stock: prod.stock - item.cantidad } : prod;
+          const n = unidadesDe(items, prod.id);
+          return n > 0 ? { ...prod, stock: prod.stock - n } : prod;
         });
         return {
           ...d,
           productos,
           pedidos: [
-            { id: uid(), cliente, telefono: telefono.trim() || undefined, fecha, items, estado: "pendiente", descuento },
+            {
+              id: uid(),
+              cliente,
+              telefono: telefono.trim() || undefined,
+              fecha,
+              items,
+              estado: "pendiente",
+              descuento: descuentoValido(descuento),
+            },
             ...d.pedidos,
           ],
         };
@@ -518,15 +557,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         let productosTemp = [...d.productos];
         if (pedidoAnterior.estado === "pendiente") {
           productosTemp = productosTemp.map((prod) => {
-            const itemViejo = pedidoAnterior.items.find((i) => i.productoId === prod.id);
-            return itemViejo ? { ...prod, stock: prod.stock + itemViejo.cantidad } : prod;
+            const n = unidadesDe(pedidoAnterior.items, prod.id);
+            return n > 0 ? { ...prod, stock: prod.stock + n } : prod;
           });
         }
 
         const productosFinales = productosTemp.map((prod) => {
-          const itemNuevo = items.find((i) => i.productoId === prod.id);
-          return itemNuevo
-            ? { ...prod, stock: pedidoAnterior.estado === "pendiente" ? prod.stock - itemNuevo.cantidad : prod.stock }
+          const n = unidadesDe(items, prod.id);
+          return n > 0 && pedidoAnterior.estado === "pendiente"
+            ? { ...prod, stock: prod.stock - n }
             : prod;
         });
 
@@ -541,7 +580,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   telefono: telefono.trim() || undefined,
                   fecha,
                   items,
-                  descuento,
+                  descuento: descuentoValido(descuento),
                 }
               : p,
           ),
@@ -581,8 +620,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cambiar((d) => ({
         ...d,
         productos: d.productos.map((prod) => {
-          const item = items.find((i) => i.productoId === prod.id);
-          return item ? { ...prod, stock: prod.stock - item.cantidad } : prod;
+          const n = unidadesDe(items, prod.id);
+          return n > 0 ? { ...prod, stock: prod.stock - n } : prod;
         }),
         pedidos: [
           {
@@ -610,8 +649,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let productos = [...d.productos];
       if (pedido.estado === "pendiente") {
         productos = productos.map((prod) => {
-          const item = pedido.items.find((i) => i.productoId === prod.id);
-          return item ? { ...prod, stock: prod.stock + item.cantidad } : prod;
+          const n = unidadesDe(pedido.items, prod.id);
+          return n > 0 ? { ...prod, stock: prod.stock + n } : prod;
         });
       }
 
@@ -627,12 +666,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     cambiar((d) => ({ ...d, insumos: [...d.insumos, { ...i, id: uid() }] }));
   }, []);
 
-  const actualizarInsumo = useCallback((id: string, i: Omit<Insumo, "id">) => {
-    cambiar((d) => ({
-      ...d,
-      insumos: d.insumos.map((x) => (x.id === id ? { ...i, id } : x)),
-    }));
-  }, []);
+  const actualizarInsumo = useCallback(
+    (id: string, i: Omit<Insumo, "id">, stockAnterior?: number) => {
+      cambiar((d) => ({
+        ...d,
+        insumos: d.insumos.map((x) =>
+          x.id === id
+            ? {
+                ...i,
+                id,
+                stock:
+                  stockAnterior === undefined
+                    ? i.stock
+                    : Math.round((x.stock + i.stock - stockAnterior) * 100) / 100,
+              }
+            : x,
+        ),
+      }));
+    },
+    [],
+  );
 
   const eliminarInsumo = useCallback((id: string) => {
     cambiar((d) => ({
@@ -686,7 +739,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     cambiar((d) => ({
       ...d,
       productos: d.productos.map((p) =>
-        p.id === productoId
+        p.id === productoId && p.stock >= cantidad
           ? { ...p, stock: p.stock - cantidad, millaray: (p.millaray ?? 0) + cantidad }
           : p,
       ),
@@ -697,8 +750,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     cambiar((d) => ({
       ...d,
       productos: d.productos.map((p) =>
-        p.id === productoId
-          ? { ...p, stock: p.stock + cantidad, millaray: Math.max(0, (p.millaray ?? 0) - cantidad) }
+        p.id === productoId && (p.millaray ?? 0) >= cantidad
+          ? { ...p, stock: p.stock + cantidad, millaray: (p.millaray ?? 0) - cantidad }
           : p,
       ),
     }));
@@ -746,6 +799,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const producto = d.productos.find((p) => p.id === productoId);
         if (!producto || (producto.millaray ?? 0) < cantidad) return d;
         const fecha = new Date().toISOString();
+        const desc = descuentoValido(descuento);
         const pedido: Pedido = {
           id: uid(),
           cliente: `Millaray · ${cliente}`,
@@ -761,7 +815,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               costo: producto.costo,
             },
           ],
-          descuento,
+          descuento: desc,
         };
         const venta: VentaMillaray = {
           id: uid(),
@@ -773,7 +827,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           metodoPago,
           pagado: false,
           fecha,
-          descuento,
+          descuento: desc,
+          pedidoId: pedido.id,
         };
         return {
           ...d,
@@ -792,7 +847,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     cambiar((d) => ({
       ...d,
       ventasMillaray: d.ventasMillaray.map((v) =>
-        v.id === id ? { ...v, pagado: !v.pagado } : v,
+        v.id === id ? { ...v, pagado: true } : v,
       ),
     }));
   }, []);
@@ -808,16 +863,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           : p
       );
 
-      // El pedido que creó esta venta no tiene enlace guardado: se busca el que coincide
+      // Ventas nuevas guardan su pedido; en las antiguas se busca el que coincide
       // (shortcut: si hay pedidos idénticos se quita solo el primero; ya archivados en un cierre no se tocan).
-      const i = d.pedidos.findIndex(
-        (p) =>
-          p.cliente === `Millaray · ${venta.cliente}` &&
-          p.items.length === 1 &&
-          p.items[0]!.productoId === venta.productoId &&
-          p.items[0]!.cantidad === venta.cantidad &&
-          p.descuento === venta.descuento &&
-          (p.fecha === fechaChile(venta.fecha) || p.fecha === venta.fecha.slice(0, 10)),
+      const i = d.pedidos.findIndex((p) =>
+        venta.pedidoId
+          ? p.id === venta.pedidoId
+          : p.cliente === `Millaray · ${venta.cliente}` &&
+            p.items.length === 1 &&
+            p.items[0]!.productoId === venta.productoId &&
+            p.items[0]!.cantidad === venta.cantidad &&
+            p.descuento === venta.descuento &&
+            (p.fecha === fechaChile(venta.fecha) || p.fecha === venta.fecha.slice(0, 10)),
       );
 
       return {
@@ -870,10 +926,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const pagarSueldoAlex = useCallback(() => {
+  // Solo las ventas que se vieron al confirmar: si Alex vendió justo después, queda para el próximo pago
+  const pagarSueldoAlex = useCallback((ids: string[]) => {
+    const pagar = new Set(ids);
     cambiar((d) => ({
       ...d,
-      ventasAlex: d.ventasAlex.map((v) => (v.sueldoPagado ? v : { ...v, sueldoPagado: true })),
+      ventasAlex: d.ventasAlex.map((v) => (pagar.has(v.id) ? { ...v, sueldoPagado: true } : v)),
     }));
   }, []);
 
