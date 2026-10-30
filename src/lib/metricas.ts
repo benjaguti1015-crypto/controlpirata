@@ -1,5 +1,12 @@
 import { fechaChile } from "@/lib/fecha";
-import { cuentaComoVenta, type Cierre, type Pedido, type Producto } from "@/lib/store";
+import {
+  costoPedido,
+  cuentaComoVenta,
+  totalPedido,
+  type Cierre,
+  type Pedido,
+  type Producto,
+} from "@/lib/store";
 
 export type Dia = { fecha: string; ventas: number; utilidad: number };
 
@@ -24,9 +31,9 @@ export function ventasPorDia(cierres: Cierre[], pedidos: Pedido[], n = 30): Dia[
   for (const p of pedidos.filter(cuentaComoVenta)) {
     const d = mapa.get(p.fecha);
     if (!d) continue;
-    const ingreso = p.items.reduce((s, i) => s + i.precio * i.cantidad, 0) * (1 - (p.descuento ?? 0) / 100);
+    const ingreso = totalPedido(p);
     d.ventas += ingreso;
-    d.utilidad += ingreso - p.items.reduce((s, i) => s + i.costo * i.cantidad, 0);
+    d.utilidad += ingreso - costoPedido(p);
   }
   return [...mapa.values()];
 }

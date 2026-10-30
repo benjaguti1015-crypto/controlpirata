@@ -194,6 +194,10 @@ function MillarayPage() {
     }
 
     const valDesc = descuentoVenta.trim() === "" ? undefined : Number(descuentoVenta);
+    if (valDesc !== undefined && (!Number.isFinite(valDesc) || valDesc < 0 || valDesc > 100)) {
+      setErrorVenta("El descuento debe ser un número entre 0 y 100");
+      return;
+    }
     lineasVenta.forEach((l) =>
       registrarVentaMillaray(cliente.trim(), l.producto.id, l.cantidad, metodoPago, valDesc),
     );
@@ -325,6 +329,7 @@ function MillarayPage() {
                           size="icon"
                           className="h-7 w-7 text-muted-foreground"
                           onClick={() => {
+                            if (!window.confirm(`¿Eliminar la venta a ${v.cliente}?`)) return;
                             eliminarVentaMillaray(v.id);
                             toast.success("Registro de venta eliminado");
                           }}

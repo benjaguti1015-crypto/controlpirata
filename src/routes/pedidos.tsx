@@ -164,6 +164,9 @@ function PedidosPage() {
     });
 
     if (items.length === 0) errs.push("Agrega al menos un producto al pedido.");
+    const descNum = Number(descuento);
+    if (descuento.trim() !== "" && (!Number.isFinite(descNum) || descNum < 0 || descNum > 100))
+      errs.push("El descuento debe ser un número entre 0 y 100.");
     setErrores(errs);
     if (errs.length) return;
 
@@ -172,13 +175,21 @@ function PedidosPage() {
       return;
     }
 
-    const valDescuento = descuento.trim() === "" ? undefined : Number(descuento);
+    const valDescuento = descuento.trim() === "" ? undefined : descNum;
+
+    // La misma galleta en dos líneas se junta en una sola
+    const unidos: ItemPedido[] = [];
+    for (const it of items) {
+      const prev = unidos.find((u) => u.productoId === it.productoId);
+      if (prev) prev.cantidad += it.cantidad;
+      else unidos.push({ ...it });
+    }
 
     if (pedidoEditando) {
-      actualizarPedido(pedidoEditando.id, cliente.trim(), telefono.trim(), fecha, items, valDescuento);
+      actualizarPedido(pedidoEditando.id, cliente.trim(), telefono.trim(), fecha, unidos, valDescuento);
       toast.success("Pedido actualizado");
     } else {
-      agregarPedido(cliente.trim(), telefono.trim(), fecha, items, valDescuento);
+      agregarPedido(cliente.trim(), telefono.trim(), fecha, unidos, valDescuento);
       toast.success("Pedido registrado");
     }
     setAbierto(false);
@@ -348,6 +359,7 @@ function PedidosPage() {
                             size="icon"
                             className="shrink-0"
                             onClick={() => {
+                              if (!window.confirm(`¿Eliminar el pedido de ${p.cliente}?`)) return;
                               eliminarPedido(p.id);
                               toast.success("Pedido eliminado");
                             }}

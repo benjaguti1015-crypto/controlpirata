@@ -354,7 +354,7 @@ function ChicoAlexContenido() {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                pagarSueldoAlex();
+                pagarSueldoAlex(sinLiquidar.map((v) => v.id));
                 toast.success(`Sueldo de ${money(resumen.sueldo)} registrado como pagado`);
               }}
             >
