@@ -84,7 +84,6 @@ function Dashboard() {
       pendientes,
       valorPendiente: pendientes.reduce((s, p) => s + totalPedido(p), 0),
       dias,
-      hoy: dias[dias.length - 1]!,
       ventasSemana: semana.reduce((s, d) => s + d.ventas, 0),
       utilidadSemana: semana.reduce((s, d) => s + d.utilidad, 0),
       top: ventasPorProducto(cierres, pedidos, dias, productos).slice(0, 5),
@@ -158,7 +157,14 @@ function Dashboard() {
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Metric icon={Coins} label="Ventas de hoy" value={money(m.hoy.ventas)} destacado />
+          {/* Solo lo que falta cerrar: al cerrar el día vuelve a cero (lo cerrado queda en el historial) */}
+          <Metric
+            icon={Coins}
+            label="Ventas de hoy"
+            value={money(m.ingresos)}
+            hint="Vuelve a $0 al cerrar el día"
+            destacado
+          />
           <Metric icon={CalendarCheck} label="Ventas 7 días" value={money(m.ventasSemana)} />
           <Metric icon={Wallet} label="Utilidad 7 días" value={money(m.utilidadSemana)} />
           <Metric
