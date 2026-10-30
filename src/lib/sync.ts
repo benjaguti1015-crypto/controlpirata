@@ -41,6 +41,8 @@ export class Sincronizador<T> {
   private local: T;
   private corriendo = false;
   private quiereRefrescar = false;
+  // Escritura que falló sin respuesta (mala señal): puede que sí haya llegado al servidor
+  private dudosa: { version: string; cambios: number } | null = null;
   private backend: Backend<T>;
   private vacio: T;
   private alCambiar: (data: T) => void;
@@ -99,6 +101,7 @@ export class Sincronizador<T> {
     this.confirmado = null;
     this.pendientes = [];
     this.quiereRefrescar = false;
+    this.dudosa = null;
     this.local = this.vacio;
     this.alCambiar(this.vacio);
     this.alEstado("ok");
@@ -128,6 +131,15 @@ export class Sincronizador<T> {
         if (this.quiereRefrescar || !this.confirmado) {
           this.quiereRefrescar = false;
           this.confirmado = await this.backend.leer();
+          // Si la escritura dudosa sí llegó, la nube ya tiene esos cambios: no aplicarlos dos veces
+          // (antes esto duplicaba pedidos y cierres, inflando las ventas)
+          if (
+            this.dudosa &&
+            Date.parse(this.dudosa.version) === Date.parse(this.confirmado.version)
+          ) {
+            this.pendientes = this.pendientes.slice(this.dudosa.cambios);
+          }
+          this.dudosa = null;
           this.recalcular();
           continue;
         }
@@ -135,11 +147,10 @@ export class Sincronizador<T> {
         const lote = this.pendientes.slice();
         const base = this.confirmado;
         const nuevo = lote.reduce((d, c) => this.ejecutar(c, d), base.data);
-        const version = await this.backend.escribir(
-          nuevo,
-          base.version,
-          siguienteVersion(base.version),
-        );
+        const nueva = siguienteVersion(base.version);
+        this.dudosa = { version: nueva, cambios: lote.length };
+        const version = await this.backend.escribir(nuevo, base.version, nueva);
+        this.dudosa = null;
         if (version === null) {
           // Otro dispositivo guardó antes: traer lo suyo y reaplicar lo nuestro encima
           this.quiereRefrescar = true;
@@ -150,6 +161,8 @@ export class Sincronizador<T> {
       }
       this.alEstado("ok");
     } catch {
+      // Antes de reintentar hay que releer la nube (y ver si la escritura dudosa llegó)
+      this.quiereRefrescar = true;
       this.alEstado(this.pendientes.length > 0 || !this.confirmado ? "error" : "ok");
     } finally {
       this.corriendo = false;

@@ -208,17 +208,25 @@ const vacio: Data = {
   ventasAlex: [],
 };
 
+// Quita registros repetidos con el mismo id (los dejaba un error de sincronización con mala señal)
+const unicos = <T extends { id: string }>(xs: T[]) => {
+  const vistos = new Set<string>();
+  return xs.filter((x) => !vistos.has(x.id) && !!vistos.add(x.id));
+};
+
 function sanea(raw: unknown): Data {
   const parsed = (raw ?? {}) as Partial<Data>;
   return {
-    productos: Array.isArray(parsed.productos) ? parsed.productos.filter(isProducto) : [],
-    pedidos: Array.isArray(parsed.pedidos) ? parsed.pedidos.filter(isPedido) : [],
-    cierres: Array.isArray(parsed.cierres) ? parsed.cierres.filter(isCierre) : [],
-    insumos: Array.isArray(parsed.insumos) ? parsed.insumos.filter(isInsumo) : [],
+    productos: Array.isArray(parsed.productos) ? unicos(parsed.productos.filter(isProducto)) : [],
+    pedidos: Array.isArray(parsed.pedidos) ? unicos(parsed.pedidos.filter(isPedido)) : [],
+    cierres: Array.isArray(parsed.cierres) ? unicos(parsed.cierres.filter(isCierre)) : [],
+    insumos: Array.isArray(parsed.insumos) ? unicos(parsed.insumos.filter(isInsumo)) : [],
     ventasMillaray: Array.isArray(parsed.ventasMillaray)
-      ? parsed.ventasMillaray.filter(isVentaMillaray)
+      ? unicos(parsed.ventasMillaray.filter(isVentaMillaray))
       : [],
-    ventasAlex: Array.isArray(parsed.ventasAlex) ? parsed.ventasAlex.filter(isVentaAlex) : [],
+    ventasAlex: Array.isArray(parsed.ventasAlex)
+      ? unicos(parsed.ventasAlex.filter(isVentaAlex))
+      : [],
   };
 }
 
@@ -307,6 +315,14 @@ type Store = {
 
 const StoreContext = createContext<Store | null>(null);
 
+// Con mala señal una petición puede quedar colgada para siempre y bloquear todos los guardados
+const TIEMPO_MAXIMO = 15000;
+const conLimite = () => {
+  const control = new AbortController();
+  window.setTimeout(() => control.abort(), TIEMPO_MAXIMO);
+  return control.signal;
+};
+
 // Lectura y escritura en la nube. Solo escribe si nadie más guardó desde la última lectura.
 const backendNube = {
   leer: async () => {
@@ -314,6 +330,7 @@ const backendNube = {
       .from("app_state")
       .select("data, updated_at")
       .eq("id", STATE_ID)
+      .abortSignal(conLimite())
       .maybeSingle();
     if (error) throw error;
     if (!row) throw new Error("Sin acceso a los datos");
@@ -325,7 +342,8 @@ const backendNube = {
       .update({ data, updated_at: nueva })
       .eq("id", STATE_ID)
       .eq("updated_at", base)
-      .select("updated_at");
+      .select("updated_at")
+      .abortSignal(conLimite());
     if (error) throw error;
     return filas?.[0]?.updated_at ?? null;
   },
