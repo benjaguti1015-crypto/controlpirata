@@ -348,7 +348,7 @@ export function HistorialCierres({ cierres }: { cierres: Cierre[] }) {
                 {c.detalle && c.detalle.length > 0 ? (
                   <ul className="mt-1.5 space-y-0.5 pl-1 text-xs text-muted-foreground">
                     {c.detalle.map((i) => (
-                      <li key={i.productoId} className="flex justify-between gap-3">
+                      <li key={`${i.productoId}-${i.precio}`} className="flex justify-between gap-3">
                         <span className="truncate">
                           {i.cantidad} × {i.nombre}
                         </span>
@@ -404,7 +404,7 @@ export function HistorialCierres({ cierres }: { cierres: Cierre[] }) {
                 <Label>Productos vendidos</Label>
                 {form.detalle.map((l, idx) => (
                   <div
-                    key={l.productoId}
+                    key={`${l.productoId}-${l.precio}-${idx}`}
                     className="grid grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-2 rounded-xl border border-border bg-card p-2.5"
                   >
                     <div className="min-w-0">

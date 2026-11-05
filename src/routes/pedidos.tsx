@@ -300,22 +300,25 @@ function PedidosPage() {
                                 <span className="text-[10px] text-primary font-medium">({p.descuento}% desc.)</span>
                               ) : null}
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                              onClick={() => abrirEditar(p)}
-                              title="Editar pedido"
-                            >
-                              <Pencil className="h-4 w-4" />
-                              <span className="sr-only">Editar pedido</span>
-                            </Button>
+                            {/* Las promos no se editan (su precio va repartido): se eliminan y se registran de nuevo */}
+                            {!p.promo && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                onClick={() => abrirEditar(p)}
+                                title="Editar pedido"
+                              >
+                                <Pencil className="h-4 w-4" />
+                                <span className="sr-only">Editar pedido</span>
+                              </Button>
+                            )}
                           </div>
                         </div>
 
                         <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
                           {p.items.map((i) => (
-                            <li key={i.productoId} className="flex justify-between gap-3">
+                            <li key={`${i.productoId}-${i.precio}`} className="flex justify-between gap-3">
                               <span className="truncate">
                                 {i.cantidad} × {i.nombre}
                               </span>
@@ -403,7 +406,7 @@ function PedidosPage() {
                       </div>
                       <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
                         {p.items.map((i) => (
-                          <li key={i.productoId} className="truncate">
+                          <li key={`${i.productoId}-${i.precio}`} className="truncate">
                             {i.cantidad} × {i.nombre}
                           </li>
                         ))}

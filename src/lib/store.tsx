@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { fechaChile } from "@/lib/fecha";
 import { Sincronizador, uid, type EstadoSync } from "@/lib/sync";
+import type { PromoId } from "@/lib/promos";
 
 export type Producto = {
   id: string;
@@ -53,6 +54,8 @@ export type Pedido = {
   descuento?: number | undefined; // Porcentaje de descuento opcional (ej: 50 para 50%)
   pagado?: boolean | undefined; // undefined = pedido antiguo, se considera pagado
   canal?: "presencial" | undefined;
+  // Venta por promo: el precio ya viene repartido en los items; costoCaja se suma al costo (undefined = sin caja o sin costo aún)
+  promo?: { id: PromoId; nombre: string; precio: number; costoCaja?: number | undefined } | undefined;
 };
 
 export type VentaMillaray = {
@@ -107,6 +110,7 @@ type Data = {
   insumos: Insumo[];
   ventasMillaray: VentaMillaray[];
   ventasAlex: VentaAlex[];
+  costosCaja: Partial<Record<PromoId, number>>;
 };
 
 const KEY = "dulces-rey-pirata-v1";
@@ -215,6 +219,7 @@ const vacio: Data = {
   insumos: [],
   ventasMillaray: [],
   ventasAlex: [],
+  costosCaja: {},
 };
 
 // Quita registros repetidos con el mismo id (los dejaba un error de sincronización con mala señal)
@@ -236,6 +241,12 @@ function sanea(raw: unknown): Data {
     ventasAlex: Array.isArray(parsed.ventasAlex)
       ? unicos(parsed.ventasAlex.filter(isVentaAlex))
       : [],
+    costosCaja:
+      parsed.costosCaja && typeof parsed.costosCaja === "object"
+        ? Object.fromEntries(
+            Object.entries(parsed.costosCaja).filter(([, v]) => typeof v === "number" && v >= 0),
+          )
+        : {},
   };
 }
 
@@ -294,7 +305,14 @@ type Store = {
   entregarPedido: (id: string) => void;
   marcarPedidoPagado: (id: string, pagado?: boolean) => void;
   deshacerEntrega: (id: string) => void;
-  registrarVentaRapida: (items: ItemPedido[], cliente: string, pagado: boolean) => void;
+  registrarVentaRapida: (
+    items: ItemPedido[],
+    cliente: string,
+    pagado: boolean,
+    promo?: Pedido["promo"],
+  ) => void;
+  costosCaja: Partial<Record<PromoId, number>>;
+  fijarCostoCaja: (id: PromoId, costo: number | undefined) => void;
   eliminarPedido: (id: string) => void;
   cerrarDia: () => Cierre | null;
   actualizarCierre: (id: string, c: Omit<Cierre, "id">) => void;
@@ -616,7 +634,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const registrarVentaRapida = useCallback(
-    (items: ItemPedido[], cliente: string, pagado: boolean) => {
+    (items: ItemPedido[], cliente: string, pagado: boolean, promo?: Pedido["promo"]) => {
       cambiar((d) => ({
         ...d,
         productos: d.productos.map((prod) => {
@@ -633,6 +651,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             estado: "entregado" as const,
             pagado,
             canal: "presencial" as const,
+            ...(promo ? { promo } : {}),
           },
           ...d.pedidos,
         ],
@@ -640,6 +659,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  const fijarCostoCaja = useCallback((id: PromoId, costo: number | undefined) => {
+    cambiar((d) => {
+      const costosCaja = { ...d.costosCaja };
+      if (costo === undefined) delete costosCaja[id];
+      else costosCaja[id] = costo;
+      return { ...d, costosCaja };
+    });
+  }, []);
 
   const eliminarPedido = useCallback((id: string) => {
     cambiar((d) => {
@@ -949,11 +977,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const detalleMap = new Map<string, ItemPedido>();
       entregados.forEach((p) =>
         p.items.forEach((i) => {
-          const prev = detalleMap.get(i.productoId);
+          // Separado por precio: las promos reparten un precio distinto al suelto
+          const k = `${i.productoId}|${i.precio}|${i.costo}`;
+          const prev = detalleMap.get(k);
           if (prev) {
             prev.cantidad += i.cantidad;
           } else {
-            detalleMap.set(i.productoId, { ...i });
+            detalleMap.set(k, { ...i });
           }
         }),
       );
@@ -1001,6 +1031,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       estadoSync,
       sesion,
       sesionAlex,
+      costosCaja: data.costosCaja,
       iniciarSesion,
       iniciarSesionAlex,
       cerrarSesion,
@@ -1013,6 +1044,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       marcarPedidoPagado,
       deshacerEntrega,
       registrarVentaRapida,
+      fijarCostoCaja,
       eliminarPedido,
       cerrarDia,
       actualizarCierre,
@@ -1051,6 +1083,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       marcarPedidoPagado,
       deshacerEntrega,
       registrarVentaRapida,
+      fijarCostoCaja,
       eliminarPedido,
       cerrarDia,
       actualizarCierre,
@@ -1099,7 +1132,7 @@ export const totalPedido = (p: Pedido) => {
 };
 
 export const costoPedido = (p: Pedido) =>
-  p.items.reduce((s, i) => s + i.costo * i.cantidad, 0);
+  p.items.reduce((s, i) => s + i.costo * i.cantidad, 0) + (p.promo?.costoCaja ?? 0);
 /** Punto de venta de un pedido: las ventas de Millaray y Alex se registran con su prefijo. */
 export const canalPedido = (p: Pedido): Canal =>
   p.cliente.startsWith("Alex · ")

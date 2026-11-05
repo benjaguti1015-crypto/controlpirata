@@ -41,6 +41,7 @@ import { CANALES, DesgloseCanales } from "@/components/DesgloseCanales";
 import { ventasPorDia, ventasPorProducto } from "@/lib/metricas";
 import { VentasDiarias } from "@/components/VentasDiarias";
 import { VentaRapida } from "@/components/VentaRapida";
+import { VentaPromo } from "@/components/VentaPromo";
 import { Pendientes } from "@/components/Pendientes";
 import { toast } from "sonner";
 import { AdminGuard } from "@/components/adminguard";
@@ -180,7 +181,10 @@ function Dashboard() {
         </div>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <VentaRapida />
+          <div className="space-y-4">
+            <VentaRapida />
+            <VentaPromo />
+          </div>
           <Pendientes />
         </div>
 
