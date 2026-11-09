@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { PROMOS, entraEnPromo, repartirPromo, type PromoId } from "@/lib/promos";
+import { PROMOS_RAPIDAS, entraEnPromo, repartirPromo, type PromoId } from "@/lib/promos";
 import { money, useStore, type ItemPedido } from "@/lib/store";
 
 export function VentaPromo() {
@@ -15,7 +15,8 @@ export function VentaPromo() {
   const [cliente, setCliente] = useState("");
   const [pagado, setPagado] = useState(true);
 
-  const promo = PROMOS.find((p) => p.id === promoId)!;
+  // Las promos con caja (4 y 6) se encargan con anticipación: van en Pedidos
+  const promo = PROMOS_RAPIDAS.find((p) => p.id === promoId) ?? PROMOS_RAPIDAS[0]!;
   const sabores = productos.filter((p) => entraEnPromo(p.nombre));
   const elegidas = sabores.reduce((s, p) => s + (cantidades[p.id] ?? 0), 0);
   const diferencia = promo.galletas - elegidas;
@@ -55,30 +56,37 @@ export function VentaPromo() {
     setPagado(true);
   };
 
-  if (sabores.length === 0) return null;
+  if (sabores.length === 0 || PROMOS_RAPIDAS.length === 0) return null;
 
   return (
     <Card>
       <CardContent className="p-4">
         <h2 className="text-base font-semibold">Venta por promo</h2>
+        {PROMOS_RAPIDAS.length === 1 && (
+          <p className="text-xs text-muted-foreground">
+            {promo.nombre} · {promo.galletas} u. · {money(promo.precio)}
+          </p>
+        )}
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {PROMOS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setPromoId(p.id)}
-              className={`flex min-h-14 touch-manipulation flex-col items-center justify-center rounded-xl border px-1 text-center transition-[transform,background-color] duration-150 ease-out active:scale-[0.97] ${
-                promoId === p.id ? "border-primary bg-primary text-primary-foreground" : "bg-card"
-              }`}
-            >
-              <span className="text-xs font-semibold leading-tight">{p.nombre}</span>
-              <span className="text-[11px] tabular-nums opacity-80">
-                {p.galletas} u. · {money(p.precio)}
-              </span>
-            </button>
-          ))}
-        </div>
+        {PROMOS_RAPIDAS.length > 1 && (
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {PROMOS_RAPIDAS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPromoId(p.id)}
+                className={`flex min-h-14 touch-manipulation flex-col items-center justify-center rounded-xl border px-1 text-center transition-[transform,background-color] duration-150 ease-out active:scale-[0.97] ${
+                  promoId === p.id ? "border-primary bg-primary text-primary-foreground" : "bg-card"
+                }`}
+              >
+                <span className="text-xs font-semibold leading-tight">{p.nombre}</span>
+                <span className="text-[11px] tabular-nums opacity-80">
+                  {p.galletas} u. · {money(p.precio)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="mt-3 grid grid-cols-2 gap-2.5">
           {sabores.map((p) => {

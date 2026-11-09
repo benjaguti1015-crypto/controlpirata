@@ -37,17 +37,13 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fechaChile } from "@/lib/fecha";
+import { PROMOS_PEDIDO, entraEnPromo, repartirPromo, type PromoId } from "@/lib/promos";
 import { useStore, money, totalPedido, type ItemPedido, type Pedido } from "@/lib/store";
 import { AdminGuard } from "@/components/adminguard";
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
     </svg>
   );
@@ -73,9 +69,40 @@ export const Route = createFileRoute("/pedidos")({
 });
 
 type Borrador = { productoId: string; cantidad: string };
+type Tipo = "normal" | PromoId;
+
+/** Junta la misma galleta en una línea (una promo reparte su precio y puede dejarla en dos). */
+const lineasVista = (p: Pedido) => {
+  const out: { productoId: string; nombre: string; cantidad: number; total: number }[] = [];
+  for (const i of p.items) {
+    const prev = out.find((o) => o.productoId === i.productoId);
+    if (prev) {
+      prev.cantidad += i.cantidad;
+      prev.total += i.precio * i.cantidad;
+    } else {
+      out.push({
+        productoId: i.productoId,
+        nombre: i.nombre,
+        cantidad: i.cantidad,
+        total: i.precio * i.cantidad,
+      });
+    }
+  }
+  return out;
+};
 
 function PedidosPage() {
-  const { productos, pedidos, agregarPedido, actualizarPedido, entregarPedido, eliminarPedido } = useStore();
+  const {
+    productos,
+    pedidos,
+    agregarPedido,
+    actualizarPedido,
+    entregarPedido,
+    eliminarPedido,
+    costosCaja,
+    fijarCostoCaja,
+  } = useStore();
+  const [tipo, setTipo] = useState<Tipo>("normal");
   const [abierto, setAbierto] = useState(false);
   const [pedidoEditando, setPedidoEditando] = useState<Pedido | null>(null);
   const [cliente, setCliente] = useState("");
@@ -85,6 +112,14 @@ function PedidosPage() {
   const [lineas, setLineas] = useState<Borrador[]>([{ productoId: "", cantidad: "1" }]);
   const [errores, setErrores] = useState<string[]>([]);
   const [confirmarStock, setConfirmarStock] = useState(false);
+
+  const promo = PROMOS_PEDIDO.find((x) => x.id === tipo);
+  const opciones = promo ? productos.filter((p) => entraEnPromo(p.nombre)) : productos;
+  const galletasBorrador = lineas.reduce((s, l) => {
+    const cant = Number(l.cantidad);
+    return s + (l.productoId && Number.isInteger(cant) && cant > 0 ? cant : 0);
+  }, 0);
+  const costoCaja = promo?.caja ? costosCaja[promo.id] : undefined;
 
   const pendientes = pedidos.filter((p) => p.estado === "pendiente");
   const entregados = pedidos.filter((p) => p.estado === "entregado");
@@ -105,11 +140,14 @@ function PedidosPage() {
     return s + (prod && Number.isFinite(cant) && cant > 0 ? prod.precio * cant : 0);
   }, 0);
 
-  const descuentoNum = Number(descuento) || 0;
-  const totalBorrador = Math.max(0, subtotalBorrador - (subtotalBorrador * descuentoNum) / 100);
+  const descuentoNum = promo ? 0 : Number(descuento) || 0;
+  const totalBorrador = promo
+    ? promo.precio
+    : Math.max(0, subtotalBorrador - (subtotalBorrador * descuentoNum) / 100);
 
   const abrirNuevo = () => {
     setPedidoEditando(null);
+    setTipo("normal");
     setCliente("");
     setTelefono("");
     setFecha(fechaChile());
@@ -126,11 +164,12 @@ function PedidosPage() {
     setTelefono(p.telefono || "");
     setFecha(p.fecha);
     setDescuento(p.descuento ? String(p.descuento) : "");
+    setTipo(p.promo && PROMOS_PEDIDO.some((x) => x.id === p.promo?.id) ? p.promo.id : "normal");
     setLineas(
-      p.items.map((i) => ({
+      lineasVista(p).map((i) => ({
         productoId: i.productoId,
         cantidad: String(i.cantidad),
-      }))
+      })),
     );
     setErrores([]);
     setConfirmarStock(false);
@@ -164,8 +203,19 @@ function PedidosPage() {
     });
 
     if (items.length === 0) errs.push("Agrega al menos un producto al pedido.");
+    if (promo) {
+      const total = items.reduce((s, i) => s + i.cantidad, 0);
+      if (items.length > 0 && total !== promo.galletas)
+        errs.push(`${promo.nombre} lleva ${promo.galletas} galletas (llevas ${total}).`);
+      if (items.some((i) => !entraEnPromo(i.nombre)))
+        errs.push("Las galletas clásicas no entran en promos.");
+    }
     const descNum = Number(descuento);
-    if (descuento.trim() !== "" && (!Number.isFinite(descNum) || descNum < 0 || descNum > 100))
+    if (
+      !promo &&
+      descuento.trim() !== "" &&
+      (!Number.isFinite(descNum) || descNum < 0 || descNum > 100)
+    )
       errs.push("El descuento debe ser un número entre 0 y 100.");
     setErrores(errs);
     if (errs.length) return;
@@ -175,7 +225,7 @@ function PedidosPage() {
       return;
     }
 
-    const valDescuento = descuento.trim() === "" ? undefined : descNum;
+    const valDescuento = promo || descuento.trim() === "" ? undefined : descNum;
 
     // La misma galleta en dos líneas se junta en una sola
     const unidos: ItemPedido[] = [];
@@ -185,11 +235,25 @@ function PedidosPage() {
       else unidos.push({ ...it });
     }
 
+    // Promo: el precio fijo se reparte entre las galletas (la suma da exacto el precio)
+    const finales = promo ? repartirPromo(promo.precio, unidos) : unidos;
+    const datosPromo = promo
+      ? { id: promo.id, nombre: promo.nombre, precio: promo.precio, costoCaja }
+      : undefined;
+
     if (pedidoEditando) {
-      actualizarPedido(pedidoEditando.id, cliente.trim(), telefono.trim(), fecha, unidos, valDescuento);
+      actualizarPedido(
+        pedidoEditando.id,
+        cliente.trim(),
+        telefono.trim(),
+        fecha,
+        finales,
+        valDescuento,
+        datosPromo,
+      );
       toast.success("Pedido actualizado");
     } else {
-      agregarPedido(cliente.trim(), telefono.trim(), fecha, unidos, valDescuento);
+      agregarPedido(cliente.trim(), telefono.trim(), fecha, finales, valDescuento, datosPromo);
       toast.success("Pedido registrado");
     }
     setAbierto(false);
@@ -198,15 +262,24 @@ function PedidosPage() {
   const limpiarTelefono = (numero: string) => numero.replace(/\D/g, "");
 
   const mensajeWhatsApp = (p: Pedido) => {
-    const lineasTexto = p.items
-      .map((i) => `• ${i.cantidad} x ${i.nombre} — ${money(i.precio * i.cantidad)}`)
-      .join("\n");
+    const lineasTexto = p.promo
+      ? `${p.promo.nombre}:\n` +
+        lineasVista(p)
+          .map((i) => `• ${i.cantidad} x ${i.nombre}`)
+          .join("\n")
+      : p.items
+          .map((i) => `• ${i.cantidad} x ${i.nombre} — ${money(i.precio * i.cantidad)}`)
+          .join("\n");
     const descTexto = p.descuento && p.descuento > 0 ? `\nDescuento aplicado: ${p.descuento}%` : "";
     return `Hola ${p.cliente}, tu pedido de Dulces del Rey Pirata está listo:\n\n${lineasTexto}${descTexto}\n\nTotal a pagar: ${money(totalPedido(p))}\nFecha del pedido: ${p.fecha}`;
   };
 
   const mensajeInstagram = (p: Pedido) => {
-    const lineasTexto = p.items.map((i) => `• ${i.cantidad} x ${i.nombre}`).join("\n");
+    const lineasTexto =
+      (p.promo ? `${p.promo.nombre}:\n` : "") +
+      lineasVista(p)
+        .map((i) => `• ${i.cantidad} x ${i.nombre}`)
+        .join("\n");
     const descTexto = p.descuento && p.descuento > 0 ? `\nDescuento aplicado: ${p.descuento}%` : "";
     return `🍪 Pedido — Dulces del Rey Pirata\n\nCliente: ${p.cliente}\nFecha: ${p.fecha}\n\nProductos:\n${lineasTexto}${descTexto}\n\n💰 Total: ${money(totalPedido(p))}\n\n¡Gracias por tu preferencia! ✨`;
   };
@@ -297,11 +370,13 @@ function PedidosPage() {
                             <div className="text-right">
                               <p className="shrink-0 font-semibold">{money(totalPedido(p))}</p>
                               {p.descuento && p.descuento > 0 ? (
-                                <span className="text-[10px] text-primary font-medium">({p.descuento}% desc.)</span>
+                                <span className="text-[10px] text-primary font-medium">
+                                  ({p.descuento}% desc.)
+                                </span>
                               ) : null}
                             </div>
-                            {/* Las promos no se editan (su precio va repartido): se eliminan y se registran de nuevo */}
-                            {!p.promo && (
+                            {/* Al editar una promo su precio se vuelve a repartir */}
+                            {(!p.promo || PROMOS_PEDIDO.some((x) => x.id === p.promo?.id)) && (
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -316,13 +391,19 @@ function PedidosPage() {
                           </div>
                         </div>
 
+                        {p.promo ? (
+                          <Badge variant="secondary" className="mt-3">
+                            {p.promo.nombre}
+                          </Badge>
+                        ) : null}
+
                         <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
-                          {p.items.map((i) => (
-                            <li key={`${i.productoId}-${i.precio}`} className="flex justify-between gap-3">
+                          {lineasVista(p).map((i) => (
+                            <li key={i.productoId} className="flex justify-between gap-3">
                               <span className="truncate">
                                 {i.cantidad} × {i.nombre}
                               </span>
-                              <span className="shrink-0">{money(i.precio * i.cantidad)}</span>
+                              {!p.promo && <span className="shrink-0">{money(i.total)}</span>}
                             </li>
                           ))}
                         </ul>
@@ -397,16 +478,21 @@ function PedidosPage() {
                         <div className="shrink-0 text-right">
                           <p className="font-semibold">{money(totalPedido(p))}</p>
                           {p.descuento && p.descuento > 0 ? (
-                            <span className="text-[10px] text-primary font-medium block">({p.descuento}% desc.)</span>
+                            <span className="text-[10px] text-primary font-medium block">
+                              ({p.descuento}% desc.)
+                            </span>
                           ) : null}
                           <Badge variant="secondary" className="mt-1">
                             Entregado
                           </Badge>
                         </div>
                       </div>
+                      {p.promo ? (
+                        <p className="mt-2 text-xs font-medium text-primary">{p.promo.nombre}</p>
+                      ) : null}
                       <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
-                        {p.items.map((i) => (
-                          <li key={`${i.productoId}-${i.precio}`} className="truncate">
+                        {lineasVista(p).map((i) => (
+                          <li key={i.productoId} className="truncate">
                             {i.cantidad} × {i.nombre}
                           </li>
                         ))}
@@ -441,7 +527,9 @@ function PedidosPage() {
             <DialogHeader>
               <DialogTitle>{pedidoEditando ? "Editar pedido" : "Nuevo pedido"}</DialogTitle>
               <DialogDescription>
-                {pedidoEditando ? "Modifica los productos o datos del pedido." : "Agrega uno o varios productos al mismo pedido."}
+                {pedidoEditando
+                  ? "Modifica los productos o datos del pedido."
+                  : "Agrega uno o varios productos al mismo pedido."}
               </DialogDescription>
             </DialogHeader>
 
@@ -468,7 +556,35 @@ function PedidosPage() {
                   Se usa para generar el enlace de WhatsApp.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Tipo de pedido</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "normal" as const, nombre: "Normal", detalle: "precio suelto" },
+                    ...PROMOS_PEDIDO.map((x) => ({
+                      id: x.id,
+                      nombre: x.nombre,
+                      detalle: `${x.galletas} u. · ${money(x.precio)}`,
+                    })),
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setTipo(t.id)}
+                      className={`flex min-h-12 touch-manipulation flex-col items-center justify-center rounded-xl border px-1 text-center transition-[transform,background-color] duration-150 ease-out active:scale-[0.97] ${
+                        tipo === t.id
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "bg-card"
+                      }`}
+                    >
+                      <span className="text-xs font-semibold leading-tight">{t.nombre}</span>
+                      <span className="text-[11px] tabular-nums opacity-80">{t.detalle}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className={promo ? "space-y-1.5" : "grid grid-cols-2 gap-3"}>
                 <div className="space-y-1.5">
                   <Label htmlFor="fecha">Fecha del pedido</Label>
                   <Input
@@ -478,22 +594,34 @@ function PedidosPage() {
                     onChange={(e) => setFecha(e.target.value)}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="descuento">Descuento (%)</Label>
-                  <Input
-                    id="descuento"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={descuento}
-                    onChange={(e) => setDescuento(e.target.value)}
-                    placeholder="Ej: 50"
-                  />
-                </div>
+                {!promo && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="descuento">Descuento (%)</Label>
+                    <Input
+                      id="descuento"
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={descuento}
+                      onChange={(e) => setDescuento(e.target.value)}
+                      placeholder="Ej: 50"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
-                <Label>Productos</Label>
+                <div className="flex items-baseline justify-between gap-2">
+                  <Label>{promo ? "Sabores" : "Productos"}</Label>
+                  {promo ? (
+                    <span
+                      className={`text-xs font-medium tabular-nums ${galletasBorrador === promo.galletas ? "text-primary" : "text-muted-foreground"}`}
+                      aria-live="polite"
+                    >
+                      {galletasBorrador} de {promo.galletas} galletas
+                    </span>
+                  ) : null}
+                </div>
                 {lineas.map((l, idx) => {
                   const prod = productos.find((p) => p.id === l.productoId);
                   const cant = Number(l.cantidad);
@@ -513,7 +641,7 @@ function PedidosPage() {
                             <SelectValue placeholder="Elegir galleta" />
                           </SelectTrigger>
                           <SelectContent>
-                            {productos.map((p) => (
+                            {opciones.map((p) => (
                               <SelectItem key={p.id} value={p.id}>
                                 {p.nombre} · {p.stock} u.
                               </SelectItem>
@@ -564,11 +692,39 @@ function PedidosPage() {
                 </Button>
               </div>
 
+              {promo?.caja ? (
+                <label className="block space-y-1.5 text-sm">
+                  <span className="font-medium">Costo de la caja ({promo.nombre})</span>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    placeholder="Sin definir"
+                    value={costoCaja ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      const n = Number(v);
+                      fijarCostoCaja(
+                        promo.id,
+                        v === "" || !Number.isFinite(n) || n < 0 ? undefined : n,
+                      );
+                    }}
+                  />
+                  {costoCaja === undefined ? (
+                    <span className="block text-xs text-destructive">
+                      Falta el costo de la caja: la utilidad de esta promo no lo incluye.
+                    </span>
+                  ) : null}
+                </label>
+              ) : null}
+
               <div className="rounded-xl bg-secondary/70 px-3 py-2 text-sm space-y-1">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Subtotal:</span>
-                  <span>{money(subtotalBorrador)}</span>
-                </div>
+                {promo ? null : (
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Subtotal:</span>
+                    <span>{money(subtotalBorrador)}</span>
+                  </div>
+                )}
                 {descuentoNum > 0 ? (
                   <div className="flex justify-between text-xs text-primary font-medium">
                     <span>Descuento ({descuentoNum}%):</span>
@@ -576,7 +732,7 @@ function PedidosPage() {
                   </div>
                 ) : null}
                 <div className="flex justify-between font-semibold pt-1 border-t border-border/50">
-                  <span>Total del pedido:</span>
+                  <span>{promo ? `Total ${promo.nombre}:` : "Total del pedido:"}</span>
                   <span>{money(totalBorrador)}</span>
                 </div>
               </div>
@@ -590,8 +746,8 @@ function PedidosPage() {
                     onChange={(e) => setConfirmarStock(e.target.checked)}
                   />
                   <span>
-                    El stock es insuficiente para algunos productos. Confirmo que quiero registrar el
-                    pedido de todos modos.
+                    El stock es insuficiente para algunos productos. Confirmo que quiero registrar
+                    el pedido de todos modos.
                   </span>
                 </label>
               ) : null}
@@ -609,7 +765,9 @@ function PedidosPage() {
               <Button variant="outline" onClick={() => setAbierto(false)}>
                 Cancelar
               </Button>
-              <Button onClick={guardar}>{pedidoEditando ? "Guardar cambios" : "Registrar pedido"}</Button>
+              <Button onClick={guardar}>
+                {pedidoEditando ? "Guardar cambios" : "Registrar pedido"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
