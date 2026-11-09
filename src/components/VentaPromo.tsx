@@ -15,9 +15,11 @@ export function VentaPromo() {
   const [cliente, setCliente] = useState("");
   const [pagado, setPagado] = useState(true);
 
-  // Las promos con caja (4 y 6) se encargan con anticipación: van en Pedidos
-  const promo = PROMOS_RAPIDAS.find((p) => p.id === promoId) ?? PROMOS_RAPIDAS[0]!;
+  // Las promos que se encargan con anticipación van en Pedidos; si no queda ninguna, no se muestra
+  const promo = PROMOS_RAPIDAS.find((p) => p.id === promoId) ?? PROMOS_RAPIDAS[0];
   const sabores = productos.filter((p) => entraEnPromo(p.nombre));
+  if (!promo || sabores.length === 0) return null;
+
   const elegidas = sabores.reduce((s, p) => s + (cantidades[p.id] ?? 0), 0);
   const diferencia = promo.galletas - elegidas;
   const costoCaja = promo.caja ? costosCaja[promo.id] : undefined;
@@ -55,8 +57,6 @@ export function VentaPromo() {
     setCliente("");
     setPagado(true);
   };
-
-  if (sabores.length === 0 || PROMOS_RAPIDAS.length === 0) return null;
 
   return (
     <Card>
