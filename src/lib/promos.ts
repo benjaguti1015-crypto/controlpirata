@@ -12,7 +12,7 @@ export type Promo = {
 };
 
 export const PROMOS: Promo[] = [
-  { id: "duo", nombre: "Dúo Pirata", galletas: 2, precio: 3500, caja: false, anticipado: false },
+  { id: "duo", nombre: "Dúo Pirata", galletas: 2, precio: 3500, caja: false, anticipado: true },
   {
     id: "tripulacion",
     nombre: "La Tripulación",
