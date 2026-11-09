@@ -558,7 +558,7 @@ function PedidosPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>Tipo de pedido</Label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: "normal" as const, nombre: "Normal", detalle: "precio suelto" },
                     ...PROMOS_PEDIDO.map((x) => ({
