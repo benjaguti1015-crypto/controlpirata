@@ -293,6 +293,7 @@ type Store = {
     fecha: string,
     items: ItemPedido[],
     descuento?: number,
+    promo?: Pedido["promo"],
   ) => void;
   actualizarPedido: (
     id: string,
@@ -301,6 +302,7 @@ type Store = {
     fecha: string,
     items: ItemPedido[],
     descuento?: number,
+    promo?: Pedido["promo"],
   ) => void;
   entregarPedido: (id: string) => void;
   marcarPedidoPagado: (id: string, pagado?: boolean) => void;
@@ -539,7 +541,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const agregarPedido = useCallback(
-    (cliente: string, telefono: string, fecha: string, items: ItemPedido[], descuento?: number) => {
+    (
+      cliente: string,
+      telefono: string,
+      fecha: string,
+      items: ItemPedido[],
+      descuento?: number,
+      promo?: Pedido["promo"],
+    ) => {
       cambiar((d) => {
         const productos = d.productos.map((prod) => {
           const n = unidadesDe(items, prod.id);
@@ -556,7 +565,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               fecha,
               items,
               estado: "pendiente",
-              descuento: descuentoValido(descuento),
+              // Una promo ya trae su precio repartido: no lleva descuento
+              descuento: promo ? undefined : descuentoValido(descuento),
+              ...(promo ? { promo } : {}),
             },
             ...d.pedidos,
           ],
@@ -567,7 +578,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const actualizarPedido = useCallback(
-    (id: string, cliente: string, telefono: string, fecha: string, items: ItemPedido[], descuento?: number) => {
+    (
+      id: string,
+      cliente: string,
+      telefono: string,
+      fecha: string,
+      items: ItemPedido[],
+      descuento?: number,
+      promo?: Pedido["promo"],
+    ) => {
       cambiar((d) => {
         const pedidoAnterior = d.pedidos.find((p) => p.id === id);
         if (!pedidoAnterior) return d;
@@ -598,7 +617,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                   telefono: telefono.trim() || undefined,
                   fecha,
                   items,
-                  descuento: descuentoValido(descuento),
+                  descuento: promo ? undefined : descuentoValido(descuento),
+                  promo,
                 }
               : p,
           ),

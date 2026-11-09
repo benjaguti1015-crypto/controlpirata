@@ -8,13 +8,24 @@ export type Promo = {
   galletas: number;
   precio: number;
   caja: boolean;
+  anticipado: boolean; // true = se encarga con anticipación (va en Pedidos, no en la venta rápida)
 };
 
 export const PROMOS: Promo[] = [
-  { id: "duo", nombre: "Dúo Pirata", galletas: 2, precio: 3500, caja: false },
-  { id: "tripulacion", nombre: "La Tripulación", galletas: 4, precio: 6500, caja: true },
-  { id: "cofre", nombre: "Cofre del Rey", galletas: 6, precio: 9500, caja: true },
+  { id: "duo", nombre: "Dúo Pirata", galletas: 2, precio: 3500, caja: false, anticipado: false },
+  {
+    id: "tripulacion",
+    nombre: "La Tripulación",
+    galletas: 4,
+    precio: 6500,
+    caja: true,
+    anticipado: true,
+  },
+  { id: "cofre", nombre: "Cofre del Rey", galletas: 6, precio: 9500, caja: true, anticipado: true },
 ];
+
+export const PROMOS_RAPIDAS = PROMOS.filter((p) => !p.anticipado);
+export const PROMOS_PEDIDO = PROMOS.filter((p) => p.anticipado);
 
 export const entraEnPromo = (nombre: string) => !/cl[aá]sic/i.test(nombre);
 
